@@ -145,7 +145,7 @@ setInterval(() => {
     c.isAlive = false;
     c.ping();
   }
-}, 30000);
+}, 15000);   // 15 s: conexão morta (app fechado de repente) sai da sala em até ~30 s
 wss.on('connection', (ws) => { ws.isAlive = true; ws.on('pong', () => { ws.isAlive = true; }); });
 
 server.listen(PORT, () => console.log(`P2P Drop rodando em http://localhost:${PORT}`));
