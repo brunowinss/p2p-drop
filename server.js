@@ -12,7 +12,10 @@ const TYPES = { '.html': 'text/html; charset=utf-8', '.json': 'application/json'
 const PUBLIC = path.join(__dirname, 'public');
 
 const server = http.createServer((req, res) => {
-  let p = decodeURIComponent(req.url.split('?')[0]);
+  let p;
+  // URL malformada (ex.: /%E0%A4%A) lançava URIError e derrubava o processo
+  try { p = decodeURIComponent(req.url.split('?')[0]); } catch { res.writeHead(400); return res.end('bad request'); }
+  if (p.includes('\0')) { res.writeHead(400); return res.end('bad request'); }
   if (p === '/') p = '/index.html';
   const file = path.normalize(path.join(PUBLIC, p));
   // só serve arquivos dentro de /public
@@ -23,10 +26,31 @@ const server = http.createServer((req, res) => {
   fs.createReadStream(file).pipe(res);
 });
 
-const wss = new WebSocketServer({ server });
+// maxPayload: os pedaços de arquivo têm 64 KB; 1 MB sobra e evita mensagens gigantes
+const wss = new WebSocketServer({ server, maxPayload: 1 << 20 });
+wss.on('error', () => {});
 
-wss.on('connection', (ws) => {
+// Limite de tentativas de "join" por IP: dificulta adivinhar códigos de 6 dígitos
+const JOIN_LIMIT = 30, JOIN_WINDOW = 60000;
+const joinLog = new Map(); // ip -> [timestamps]
+function tooManyJoins(ip) {
+  const now = Date.now();
+  const list = (joinLog.get(ip) || []).filter((t) => now - t < JOIN_WINDOW);
+  list.push(now);
+  joinLog.set(ip, list);
+  return list.length > JOIN_LIMIT;
+}
+setInterval(() => {
+  const now = Date.now();
+  for (const [ip, list] of joinLog) if (!list.some((t) => now - t < JOIN_WINDOW)) joinLog.delete(ip);
+}, JOIN_WINDOW);
+
+wss.on('connection', (ws, req) => {
   ws.room = null;
+  // sem este handler, um frame inválido emitia 'error' sem ouvinte e derrubava o processo
+  ws.on('error', () => {});
+  const fwd = req.headers['x-forwarded-for'];
+  const ip = fwd ? String(fwd).split(',').pop().trim() : req.socket.remoteAddress;
   ws.on('message', (raw, isBinary) => {
     // fallback relay: pedaços binários de arquivo são repassados como estão
     if (isBinary) {
@@ -36,10 +60,12 @@ wss.on('connection', (ws) => {
     }
     let msg;
     try { msg = JSON.parse(raw); } catch { return; }
+    if (!msg || typeof msg !== 'object') return;   // JSON "null" fazia msg.type lançar TypeError
 
     if (msg.type === 'join') {
       const code = String(msg.code || '').slice(0, 12);
       if (!code) return;
+      if (tooManyJoins(ip)) return ws.send(JSON.stringify({ type: 'busy' }));
       let room = rooms.get(code);
       if (!room) { room = new Set(); rooms.set(code, room); }
       // mesmo aparelho reconectando: derruba a conexão antiga dele

@@ -62,6 +62,7 @@
     <div class="code" id="myCode"></div>
     <div id="qr"></div>
     <p class="muted" style="text-align:center">Ou escaneie o QR com a câmera do celular</p>
+    <p class="muted" id="sigMsg" style="text-align:center"></p>
   </div>
 
   <div id="transfer" class="hidden">
@@ -117,7 +118,7 @@ const RTC_CONFIG = {
 // recebidos são gravados direto na galeria/Downloads pelo plugin nativo "Saver".
 const NATIVE = !!(window.Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform());
 const Saver = NATIVE ? Capacitor.Plugins.Saver : null;
-const DEFAULT_SERVER = 'https://matrix-pure-pike-controlling.trycloudflare.com';
+const DEFAULT_SERVER = 'https://p2p-drop-h5kp.onrender.com';
 function origin() {
   if (!NATIVE) return location.origin;
   let s = ($('serverInput').value || '').trim().replace(/\/+$/, '');
@@ -143,7 +144,22 @@ const sendQueue = [];
 let sending = false;
 
 /* ---------- utilidades ---------- */
-function show(id) { for (const x of ['pair','waiting','transfer']) $(x).classList.toggle('hidden', x !== id); }
+function show(id) {
+  for (const x of ['pair','waiting','transfer']) $(x).classList.toggle('hidden', x !== id);
+  if (id !== 'pair') keepAwake();
+}
+// Mantém a tela acesa durante o pareamento/transferência (celular bloqueado derruba a conexão)
+let wakeLock = null;
+async function keepAwake() {
+  try {
+    if (!navigator.wakeLock || wakeLock) return;
+    wakeLock = await navigator.wakeLock.request('screen');
+    wakeLock.addEventListener('release', () => { wakeLock = null; });
+  } catch {}
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && $('pair').classList.contains('hidden')) keepAwake();
+});
 function fmt(n) { return n > 1e9 ? (n/1e9).toFixed(2)+' GB' : n > 1e6 ? (n/1e6).toFixed(1)+' MB' : (n/1e3).toFixed(0)+' KB'; }
 const MIME = { mp4:'video/mp4', mov:'video/quicktime', m4v:'video/x-m4v', webm:'video/webm', '3gp':'video/3gpp',
   jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png', gif:'image/gif', webp:'image/webp', heic:'image/heic', heif:'image/heif' };
@@ -184,31 +200,55 @@ function buildZip(files) {
 }
 
 /* ---------- sinalização + WebRTC ---------- */
+let sigChain = Promise.resolve();      // mensagens de sinalização são tratadas uma de cada vez
+let reconnectTimer = null, reconnectTries = 0;
+function sigMsg(t) { $('sigMsg').textContent = t || ''; }
+
 function connectSignal(c) {
   code = c;
-  if (ws) { try { ws.close(); } catch {} }
+  clearTimeout(reconnectTimer);
+  if (ws) { ws.onclose = null; try { ws.close(); } catch {} }
   if (pc) { try { pc.close(); } catch {} pc = null; dc = null; }
-  ws = new WebSocket(origin().replace(/^http/, 'ws'));
-  ws.binaryType = 'arraybuffer';
-  ws.onopen = () => ws.send(JSON.stringify({ type: 'join', code, id: CLIENT_ID }));
-  ws.onmessage = async (e) => {
-    if (typeof e.data !== 'string') return onData(e);               // pedaço de arquivo via relay
-    const m = JSON.parse(e.data);
-    if (m.type === 'relay') return onData({ data: JSON.stringify(m.m) });
-    if (m.type === 'peer-joined' || m.type === 'offer') armFallback();
-    if (m.type === 'full') { alert('Código já em uso por 2 aparelhos.'); location.reload(); }
-    if (m.type === 'peer-joined') startPeer(true);
-    if (m.type === 'offer') {
-      startPeer(false);
-      await pc.setRemoteDescription(m.sdp);
-      const ans = await pc.createAnswer();
-      await pc.setLocalDescription(ans);
-      ws.send(JSON.stringify({ type: 'answer', sdp: pc.localDescription }));
-    }
-    if (m.type === 'answer') await pc.setRemoteDescription(m.sdp);
-    if (m.type === 'ice' && pc) { try { await pc.addIceCandidate(m.candidate); } catch {} }
-    if (m.type === 'peer-left') setState(false, 'Outro aparelho saiu');
+  const sock = new WebSocket(origin().replace(/^http/, 'ws'));
+  ws = sock;
+  sock.binaryType = 'arraybuffer';
+  sock.onopen = () => { reconnectTries = 0; sigMsg(''); sock.send(JSON.stringify({ type: 'join', code, id: CLIENT_ID })); };
+  sock.onclose = () => {
+    if (ws !== sock || p2pOpen()) return;          // com P2P aberto a sinalização já não é necessária
+    reconnectTries++;
+    sigMsg(reconnectTries === 1 ? 'Conectando ao servidor… (se estiver dormindo, leva até 1 minuto)' : 'Reconectando ao servidor…');
+    if (!$('transfer').classList.contains('hidden')) setState(false, 'Reconectando ao servidor…');
+    reconnectTimer = setTimeout(() => connectSignal(code), Math.min(1000 * 2 ** (reconnectTries - 1), 10000));
   };
+  sock.onmessage = (e) => {
+    if (typeof e.data !== 'string') return onData(e);               // pedaço de arquivo via relay
+    let m; try { m = JSON.parse(e.data); } catch { return; }
+    // relay precisa ser síncrono para manter a ordem start/pedaços/end
+    if (m.type === 'relay') return onData({ data: JSON.stringify(m.m) });
+    sigChain = sigChain.then(() => handleSignal(m)).catch(() => {});
+  };
+}
+
+async function handleSignal(m) {
+  // quem entra por segundo arma o plano B já aqui: se a oferta nunca chegar, não fica preso em "Conectando…"
+  if (m.type === 'peer-joined' || m.type === 'offer' || (m.type === 'joined' && m.peers === 2)) armFallback();
+  if (m.type === 'full') { alert('Código já em uso por 2 aparelhos.'); location.reload(); }
+  if (m.type === 'busy') {
+    ws.onclose = null; try { ws.close(); } catch {}
+    alert('Muitas tentativas seguidas. Aguarde 1 minuto e tente de novo.'); location.reload();
+  }
+  if (m.type === 'peer-joined') await startPeer(true);
+  if (m.type === 'offer') {
+    await startPeer(false);
+    await pc.setRemoteDescription(m.sdp);
+    const ans = await pc.createAnswer();
+    await pc.setLocalDescription(ans);
+    ws.send(JSON.stringify({ type: 'answer', sdp: pc.localDescription }));
+  }
+  // como as mensagens são serializadas, o 'ice' só chega depois do setRemoteDescription acabar
+  if (m.type === 'answer' && pc) await pc.setRemoteDescription(m.sdp);
+  if (m.type === 'ice' && pc) { try { await pc.addIceCandidate(m.candidate); } catch {} }
+  if (m.type === 'peer-left' && !p2pOpen()) { abortIncoming(); setState(false, 'Outro aparelho saiu'); }
 }
 
 let fallbackTimer = null;
@@ -222,39 +262,59 @@ function armFallback() {
 }
 function p2pOpen() { return dc && dc.readyState === 'open'; }
 function linkReady() { return p2pOpen() || (ws && ws.readyState === 1 && !$('transfer').classList.contains('hidden')); }
-function linkSend(data) {
-  if (p2pOpen()) return dc.send(data);
+// viaP2P é fixado no início de cada arquivo: trocar de canal no meio embaralhava os pedaços
+function linkSend(data, viaP2P = p2pOpen()) {
+  if (viaP2P) {
+    if (!p2pOpen()) throw new Error('a conexão P2P caiu');
+    return dc.send(data);
+  }
+  if (!ws || ws.readyState !== 1) throw new Error('sem conexão com o servidor');
   ws.send(typeof data === 'string' ? JSON.stringify({ type: 'relay', m: JSON.parse(data) }) : data);
 }
-async function drain() {
-  if (p2pOpen()) {
-    if (dc.bufferedAmount > MAX_BUFFERED)
-      await new Promise((r) => { dc.onbufferedamountlow = () => { dc.onbufferedamountlow = null; r(); }; });
+async function drain(viaP2P) {
+  if (viaP2P) {
+    if (!p2pOpen()) throw new Error('a conexão P2P caiu');
+    if (dc.bufferedAmount > MAX_BUFFERED) {
+      await new Promise((res, rej) => {
+        const ch = dc;
+        const done = () => { ch.removeEventListener('bufferedamountlow', ok); ch.removeEventListener('close', bad); };
+        const ok = () => { done(); res(); };
+        const bad = () => { done(); rej(new Error('a conexão P2P caiu')); };
+        ch.addEventListener('bufferedamountlow', ok); ch.addEventListener('close', bad);
+      });
+    }
   } else {
-    while (ws.bufferedAmount > MAX_BUFFERED) await new Promise((r) => setTimeout(r, 30));
+    while (ws && ws.readyState === 1 && ws.bufferedAmount > MAX_BUFFERED) await new Promise((r) => setTimeout(r, 30));
+    if (!ws || ws.readyState !== 1) throw new Error('sem conexão com o servidor');
   }
 }
 function setState(on, text) { $('dot').classList.toggle('on', on); $('state').textContent = text; }
 
 async function startPeer(isOfferer) {
-  pc = new RTCPeerConnection(RTC_CONFIG);
-  pc.onicecandidate = (e) => e.candidate && ws.send(JSON.stringify({ type: 'ice', candidate: e.candidate }));
+  if (pc) { try { pc.close(); } catch {} }           // reconexão: não deixa o par antigo vivo
+  dc = null;
+  const conn = pc = new RTCPeerConnection(RTC_CONFIG);
+  conn.onicecandidate = (e) => {
+    if (pc !== conn || !e.candidate || !ws || ws.readyState !== 1) return;
+    ws.send(JSON.stringify({ type: 'ice', candidate: e.candidate }));
+  };
   if (isOfferer) {
-    setupChannel(pc.createDataChannel('files', { ordered: true }));
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    ws.send(JSON.stringify({ type: 'offer', sdp: pc.localDescription }));
+    setupChannel(conn.createDataChannel('files', { ordered: true }));
+    const offer = await conn.createOffer();
+    await conn.setLocalDescription(offer);
+    ws.send(JSON.stringify({ type: 'offer', sdp: conn.localDescription }));
   } else {
-    pc.ondatachannel = (e) => setupChannel(e.channel);
+    conn.ondatachannel = (e) => { if (pc === conn) setupChannel(e.channel); };
   }
 }
 function setupChannel(ch) {
   dc = ch;
-  dc.binaryType = 'arraybuffer';
-  dc.bufferedAmountLowThreshold = MAX_BUFFERED / 2;
-  dc.onopen = () => { show('transfer'); setState(true, 'Conectado direto (P2P)'); };
-  dc.onclose = () => setState(false, 'Desconectado');
-  dc.onmessage = onData;
+  ch.binaryType = 'arraybuffer';
+  ch.bufferedAmountLowThreshold = MAX_BUFFERED / 2;
+  // eventos de um canal antigo não podem sobrescrever o estado do canal novo
+  ch.onopen = () => { if (dc !== ch) return; show('transfer'); setState(true, 'Conectado direto (P2P)'); };
+  ch.onclose = () => { if (dc !== ch) return; abortIncoming(); setState(false, 'Desconectado'); };
+  ch.onmessage = onData;
 }
 
 /* ---------- receber ---------- */
@@ -284,10 +344,19 @@ async function saveToGallery(files) {
   } catch (e) { if (e.name !== 'AbortError') alert('Não foi possível abrir o menu de compartilhar: ' + e.message); }
 }
 
+// Arquivo que não terminou (conexão caiu): fecha/apaga o parcial em vez de deixá-lo pendente
+function abortIncoming() {
+  const inc = incoming; if (!inc) return;
+  incoming = null;
+  inc.chain = inc.chain.then(() => inc.sink && inc.sink.abort && inc.sink.abort()).catch(() => {});
+  $('recvProg').classList.add('hidden');
+}
+
 function onData(e) {
   if (typeof e.data === 'string') {
-    const m = JSON.parse(e.data);
+    let m; try { m = JSON.parse(e.data); } catch { return; }
     if (m.t === 'start') {
+      if (incoming) abortIncoming();
       const inc = { ...m, got: 0, parts: [], crc: 0, sink: null, direct: !!(destDir || NATIVE) };
       incoming = inc;
       inc.chain = (async () => {
@@ -297,7 +366,7 @@ function onData(e) {
           for (const s of segs.slice(0, -1)) d = await d.getDirectoryHandle(s, { create: true });
           const fh = await d.getFileHandle(segs[segs.length - 1], { create: true });
           const w = await fh.createWritable();
-          inc.sink = { write: (b) => w.write(b), close: () => w.close() };
+          inc.sink = { write: (b) => w.write(b), close: () => w.close(), abort: () => w.abort() };
         } else if (NATIVE) {                             // Android: grava na galeria/Downloads
           const { id } = await Saver.open({ path: m.path, mime: mimeOf(m.name, m.mime) });
           let buf = [], n = 0;
@@ -310,7 +379,8 @@ function onData(e) {
           };
           inc.sink = {
             write: async (b) => { buf.push(b); n += b.byteLength; if (n >= (1 << 20)) await flush(); },
-            close: async () => { await flush(); await Saver.close({ id }); }
+            close: async () => { await flush(); await Saver.close({ id }); },
+            abort: async () => { buf = []; n = 0; await Saver.abort({ id }); }
           };
         }
       })();
@@ -376,20 +446,28 @@ async function sendItems(items) {            // items: [{ file, path }]
   sending = true;
   $('sendProg').classList.remove('hidden');
   let done = 0, total = sendQueue.length;
-  while (sendQueue.length) {
-    const it = sendQueue.shift(), f = it.file;
-    $('sendName').textContent = `Enviando ${++done}/${total}: ${it.path} (${fmt(f.size)})`;
-    linkSend(JSON.stringify({ t: 'start', name: f.name, size: f.size, mime: f.type, path: it.path, batch: it.batch }));
-    for (let off = 0; off < f.size; off += CHUNK) {
-      await drain();
-      linkSend(await f.slice(off, off + CHUNK).arrayBuffer());
-      $('sendBar').value = (Math.min(off + CHUNK, f.size) / f.size) * 100;
+  try {
+    while (sendQueue.length) {
+      const it = sendQueue.shift(), f = it.file;
+      $('sendName').textContent = `Enviando ${++done}/${total}: ${it.path} (${fmt(f.size)})`;
+      const viaP2P = p2pOpen();                       // canal fixo durante o arquivo inteiro
+      linkSend(JSON.stringify({ t: 'start', name: f.name, size: f.size, mime: f.type, path: it.path, batch: it.batch }), viaP2P);
+      for (let off = 0; off < f.size; off += CHUNK) {
+        await drain(viaP2P);
+        linkSend(await f.slice(off, off + CHUNK).arrayBuffer(), viaP2P);
+        $('sendBar').value = (Math.min(off + CHUNK, f.size) / f.size) * 100;
+      }
+      linkSend(JSON.stringify({ t: 'end' }), viaP2P);
+      total = Math.max(total, done + sendQueue.length);
     }
-    linkSend(JSON.stringify({ t: 'end' }));
-    total = Math.max(total, done + sendQueue.length);
+    $('sendName').textContent = `Envio concluído ✔ (${done} arquivo${done > 1 ? 's' : ''})`;
+  } catch (err) {
+    // sem isto, 'sending' ficava true para sempre e nada mais era enviado até recarregar
+    sendQueue.length = 0;
+    $('sendName').textContent = `Envio interrompido: ${err.message}. Reconecte e envie de novo.`;
+  } finally {
+    sending = false;
   }
-  $('sendName').textContent = `Envio concluído ✔ (${done} arquivo${done > 1 ? 's' : ''})`;
-  sending = false;
 }
 
 async function walk(entry, prefix, out) {
@@ -416,7 +494,9 @@ function fromInput(input) {
 $('btnCreate').onclick = () => {
   const c = String(Math.floor(100000 + Math.random() * 900000));
   $('myCode').textContent = c;
-  new QRCode($('qr'), { text: `${origin()}/?c=${c}`, width: 180, height: 180 });
+  $('qr').innerHTML = '';
+  // se a biblioteca do QR não carregar (CDN fora/bloqueada) o código ainda funciona sem o QR
+  try { new QRCode($('qr'), { text: `${origin()}/?c=${c}`, width: 180, height: 180 }); } catch {}
   show('waiting');
   connectSignal(c);
 };
@@ -459,6 +539,7 @@ if (NATIVE) {
   $('serverBox').classList.remove('hidden');
   $('btnDir').classList.add('hidden');                 // WebView do Android não escolhe pastas
   let s = ''; try { s = localStorage.getItem('p2pServer') || ''; } catch {}
+  if (/trycloudflare\.com/i.test(s)) s = '';          // endereço temporário antigo salvo por versões anteriores
   $('serverInput').value = s || DEFAULT_SERVER;
   $('destBox').classList.add('hidden');
 }
