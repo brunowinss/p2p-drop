@@ -1,5 +1,6 @@
 // Servidor de sinalização: só apresenta os dois aparelhos um ao outro.
-// Os arquivos NÃO passam por aqui, vão direto de um aparelho para o outro (WebRTC).
+// Os arquivos vão direto de um aparelho para o outro (WebRTC). Quando o P2P não é possível,
+// passam por aqui como relay, mas criptografados de ponta a ponta: o servidor só vê bytes cifrados.
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -8,10 +9,42 @@ const { WebSocketServer } = require('ws');
 const PORT = process.env.PORT || 3000;
 const rooms = new Map(); // código -> Set<ws>
 
-const TYPES = { '.html': 'text/html; charset=utf-8', '.json': 'application/json', '.js': 'text/javascript; charset=utf-8', '.png': 'image/png' };
+const TYPES = { '.html': 'text/html; charset=utf-8', '.json': 'application/json', '.js': 'text/javascript; charset=utf-8', '.png': 'image/png', '.txt': 'text/plain; charset=utf-8' };
 const PUBLIC = path.join(__dirname, 'public');
 
-const server = http.createServer((req, res) => {
+// Servidores ICE (STUN + TURN). TURN é opcional e vem de variáveis de ambiente no Render:
+//   Cloudflare: CF_TURN_KEY_ID + CF_TURN_API_TOKEN (credenciais temporárias geradas aqui)
+//   Outro provedor: TURN_URLS (separadas por vírgula) + TURN_USERNAME + TURN_CREDENTIAL
+const STUN = [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun.cloudflare.com:3478' }];
+let iceCache = { at: 0, servers: null };
+async function iceServers() {
+  if (iceCache.servers && Date.now() - iceCache.at < 3600e3) return iceCache.servers;
+  const servers = [...STUN];
+  const { CF_TURN_KEY_ID, CF_TURN_API_TOKEN, TURN_URLS, TURN_USERNAME, TURN_CREDENTIAL } = process.env;
+  try {
+    if (CF_TURN_KEY_ID && CF_TURN_API_TOKEN) {
+      const r = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${CF_TURN_KEY_ID}/credentials/generate`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${CF_TURN_API_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ttl: 86400 }),
+        signal: AbortSignal.timeout(5000)
+      });
+      if (r.ok) { const j = await r.json(); if (j.iceServers) servers.push(j.iceServers); }
+    } else if (TURN_URLS) {
+      servers.push({ urls: TURN_URLS.split(',').map((s) => s.trim()), username: TURN_USERNAME, credential: TURN_CREDENTIAL });
+    }
+  } catch {}
+  iceCache = { at: Date.now(), servers };
+  return servers;
+}
+
+const server = http.createServer(async (req, res) => {
+  if (req.url === '/ice') {
+    res.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
+    return res.end(JSON.stringify(await iceServers()));
+  }
+  // "Compartilhar" do PWA cai aqui só se o service worker ainda não estiver ativo
+  if (req.method === 'POST' && req.url.startsWith('/share')) { req.resume(); res.writeHead(303, { Location: '/' }); return res.end(); }
   let p;
   // URL malformada (ex.: /%E0%A4%A) lançava URIError e derrubava o processo
   try { p = decodeURIComponent(req.url.split('?')[0]); } catch { res.writeHead(400); return res.end('bad request'); }
@@ -63,8 +96,9 @@ wss.on('connection', (ws, req) => {
     if (!msg || typeof msg !== 'object') return;   // JSON "null" fazia msg.type lançar TypeError
 
     if (msg.type === 'join') {
-      const code = String(msg.code || '').slice(0, 12);
-      if (!code) return;
+      // a sala é um hash derivado do código (o servidor nunca vê o código em si)
+      const code = String(msg.code || '').slice(0, 64);
+      if (!/^[a-f0-9]{16,64}$/.test(code)) return;
       if (tooManyJoins(ip)) return ws.send(JSON.stringify({ type: 'busy' }));
       let room = rooms.get(code);
       if (!room) { room = new Set(); rooms.set(code, room); }
@@ -96,8 +130,8 @@ wss.on('connection', (ws, req) => {
 
   ws.on('close', () => {
     const room = rooms.get(ws.room);
-    if (!room) return;
-    room.delete(ws);
+    // conexão antiga que já foi substituída pela reconexão do mesmo aparelho: não avisa ninguém
+    if (!room || !room.delete(ws)) return;
     for (const peer of room) peer.send(JSON.stringify({ type: 'peer-left' }));
     if (room.size === 0) rooms.delete(ws.room);
   });

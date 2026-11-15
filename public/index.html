@@ -12,7 +12,7 @@
 <meta name="apple-mobile-web-app-title" content="P2P Drop">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <style>
-  :root { --bg:#0f1115; --card:#1a1d24; --fg:#e8eaed; --muted:#8b93a1; --accent:#4f8cff; --ok:#3ecf8e; }
+  :root { --bg:#0f1115; --card:#1a1d24; --fg:#e8eaed; --muted:#8b93a1; --accent:#4f8cff; --ok:#3ecf8e; --err:#ff6b6b; }
   * { box-sizing: border-box; }
   body { margin:0; font-family: system-ui, sans-serif; background:var(--bg); color:var(--fg); display:flex; justify-content:center; padding:16px; }
   main { width:100%; max-width:520px; }
@@ -21,22 +21,31 @@
   button { background:var(--accent); color:#fff; border:0; border-radius:10px; padding:12px 14px; font-size:1rem; cursor:pointer; }
   button.sec { background:#2a2f3a; }
   button.small { padding:6px 10px; font-size:.85rem; }
-  input[type=text] { width:100%; padding:12px; font-size:1.4rem; text-align:center; letter-spacing:.3em; border-radius:10px; border:1px solid #333; background:#0f1115; color:var(--fg); }
-  .code { font-size:2.4rem; letter-spacing:.3em; text-align:center; font-weight:700; }
+  input[type=text] { width:100%; padding:12px; font-size:1.3rem; text-align:center; border-radius:10px; border:1px solid #333; background:#0f1115; color:var(--fg); }
+  #codeInput { text-transform:uppercase; letter-spacing:.15em; font-family: ui-monospace, Consolas, monospace; }
+  .code { font-size:2rem; letter-spacing:.12em; text-align:center; font-weight:700; font-family: ui-monospace, Consolas, monospace; }
   .row { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
   .row > * { flex:1; min-width:120px; }
+  .between { display:flex; justify-content:space-between; align-items:center; gap:8px; }
   #qr { display:flex; justify-content:center; margin-top:12px; }
   #qr canvas, #qr img { background:#fff; padding:8px; border-radius:8px; }
   .muted { color:var(--muted); font-size:.9rem; }
+  .err { color:var(--err); font-size:.9rem; text-align:center; min-height:1.2em; margin:6px 0 0; }
   .drop { border:2px dashed #3a4150; border-radius:12px; padding:20px; text-align:center; }
   .drop.over { border-color:var(--accent); }
   progress { width:100%; height:10px; }
   .item { padding:10px 0; border-bottom:1px solid #262b35; font-size:.95rem; word-break:break-all; }
   .item a { color:var(--ok); }
   .item .acts { margin-top:6px; display:flex; gap:8px; flex-wrap:wrap; }
-  .hidden { display:none; }
+  .hidden { display:none !important; }
   .status { display:inline-block; width:10px; height:10px; border-radius:50%; background:#666; margin-right:6px; }
   .status.on { background:var(--ok); }
+  .hist { display:flex; gap:10px; align-items:center; padding:8px 0; border-bottom:1px solid #262b35; }
+  .hist .th { width:44px; height:44px; border-radius:8px; background:#2a2f3a; display:flex; align-items:center; justify-content:center; overflow:hidden; flex:none; font-size:1.3rem; }
+  .hist .th img { width:100%; height:100%; object-fit:cover; }
+  .hist .meta { flex:1; min-width:0; }
+  .hist .nm { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .note { background:#22314d; border-radius:10px; padding:10px 12px; margin-top:12px; font-size:.9rem; }
 </style>
 </head>
 <body>
@@ -49,24 +58,35 @@
     <div id="serverBox" class="hidden" style="margin-bottom:14px">
       <div class="muted">Endereço do servidor (só no app):</div>
       <input id="serverInput" type="text" placeholder="https://..." autocapitalize="off" autocorrect="off" spellcheck="false"
-             style="font-size:.95rem; letter-spacing:0; text-align:left; margin-top:6px">
+             style="font-size:.95rem; text-align:left; margin-top:6px">
+    </div>
+    <div id="savedBox" class="hidden" style="margin-bottom:14px">
+      <button id="btnResume" style="width:100%">🔁 Reconectar ao último aparelho</button>
+      <div class="row" style="margin-top:6px"><button id="btnForget" class="small sec">Esquecer esse aparelho</button></div>
     </div>
     <button id="btnCreate" style="width:100%">Criar código (este aparelho envia/recebe)</button>
-    <p class="muted" style="text-align:center">ou entre com o código do outro aparelho</p>
-    <input id="codeInput" type="text" maxlength="6" inputmode="numeric" placeholder="000000">
+    <p class="muted" style="text-align:center">ou digite o código do outro aparelho</p>
+    <input id="codeInput" type="text" maxlength="11" placeholder="ABC-DEF-GHJ" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false">
+    <p class="err" id="codeErr"></p>
     <div class="row"><button id="btnJoin" class="sec">Conectar</button></div>
+    <div id="queueNotePair" class="note hidden"></div>
   </div>
 
   <div id="waiting" class="card hidden">
-    <div class="muted" style="text-align:center">Digite este código no outro aparelho:</div>
+    <div class="muted" style="text-align:center" id="waitTitle">Digite este código no outro aparelho:</div>
     <div class="code" id="myCode"></div>
     <div id="qr"></div>
-    <p class="muted" style="text-align:center">Ou escaneie o QR com a câmera do celular</p>
+    <p class="muted" style="text-align:center" id="qrHint">Ou escaneie o QR com a câmera do celular</p>
     <p class="muted" id="sigMsg" style="text-align:center"></p>
+    <div id="queueNoteWait" class="note hidden"></div>
+    <div class="row"><button id="btnBack" class="small sec">Cancelar / parear outro aparelho</button></div>
   </div>
 
   <div id="transfer" class="hidden">
-    <div class="card"><span class="status" id="dot"></span><span id="state">Conectando…</span></div>
+    <div class="card between">
+      <div><span class="status" id="dot"></span><span id="state">Conectando…</span></div>
+      <button id="btnNewPair" class="small sec">Parear outro</button>
+    </div>
 
     <div class="card">
       <b>Enviar</b>
@@ -82,7 +102,9 @@
         <input id="fileDir" type="file" webkitdirectory multiple class="hidden">
       </div>
       <div id="sendProg" class="hidden" style="margin-top:12px">
-        <div class="muted" id="sendName"></div><progress id="sendBar" value="0" max="100"></progress>
+        <div class="muted" id="sendName"></div>
+        <progress id="sendBar" value="0" max="100"></progress>
+        <div class="between"><span class="muted" id="sendInfo"></span><button id="btnCancelSend" class="small sec">Cancelar</button></div>
       </div>
     </div>
 
@@ -93,10 +115,17 @@
         <div class="muted" id="destName" style="margin-top:6px">Sem pasta: os arquivos chegam como download (pastas viram .zip).</div>
       </div>
       <div id="recvProg" class="hidden" style="margin-top:10px">
-        <div class="muted" id="recvName"></div><progress id="recvBar" value="0" max="100"></progress>
+        <div class="muted" id="recvName"></div>
+        <progress id="recvBar" value="0" max="100"></progress>
+        <div class="between"><span class="muted" id="recvInfo"></span><button id="btnCancelRecv" class="small sec">Cancelar</button></div>
       </div>
       <div id="list"></div>
     </div>
+  </div>
+
+  <div id="histCard" class="card hidden">
+    <div class="between"><b>Histórico</b><button id="btnClearHist" class="small sec">Limpar</button></div>
+    <div id="histList" style="margin-top:6px"></div>
   </div>
 </main>
 
@@ -105,19 +134,28 @@
 const $ = (id) => document.getElementById(id);
 const CHUNK = 64 * 1024;
 const MAX_BUFFERED = 1 * 1024 * 1024;
-const CLIENT_ID = Math.random().toString(36).slice(2) + Date.now().toString(36);
-const RTC_CONFIG = {
-  iceServers: [
-    { urls: 'stun:stun.l.google.com:19302' },
-    { urls: 'stun:stun.cloudflare.com:3478' }
-    // Para P2P em redes restritivas, adicione um servidor TURN aqui.
-  ]
+const enc = new TextEncoder(), dec = new TextDecoder();
+const STUN = [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun.cloudflare.com:3478' }];
+
+/* ---------- armazenamento local (pode falhar em aba anônima) ---------- */
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+  del(k) { try { localStorage.removeItem(k); } catch {} }
 };
+const rid = () => Math.random().toString(36).slice(2) + Date.now().toString(36);
+// id fixo por aba (sobrevive a recarregar): ao reconectar, o servidor troca a conexão antiga
+// em vez de achar que é um terceiro aparelho. Por aba, para duas abas não se derrubarem.
+const CLIENT_ID = (() => {
+  try { let id = sessionStorage.getItem('p2pClientId'); if (!id) { id = rid(); sessionStorage.setItem('p2pClientId', id); } return id; }
+  catch { return rid(); }
+})();
 
 // Dentro do app Android (Capacitor) a página é local; o servidor é configurável e os arquivos
 // recebidos são gravados direto na galeria/Downloads pelo plugin nativo "Saver".
 const NATIVE = !!(window.Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform());
 const Saver = NATIVE ? Capacitor.Plugins.Saver : null;
+const ShareIn = NATIVE ? Capacitor.Plugins.ShareIn : null;
 const DEFAULT_SERVER = 'https://p2p-drop-h5kp.onrender.com';
 function origin() {
   if (!NATIVE) return location.origin;
@@ -131,22 +169,17 @@ function b64(buf) {
   for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
   return btoa(s);
 }
+function unb64(s) { const bin = atob(s); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u.buffer; }
 function savedWhere(name) {
   const m = mimeOf(name, '');
   return m.startsWith('image/') ? 'Galeria (Pictures/P2PDrop)' : m.startsWith('video/') ? 'Galeria (Movies/P2PDrop)' : 'Downloads/P2PDrop';
 }
 
-let ws, pc, dc, code = null;
-let incoming = null;
-let destDir = null;            // pasta de destino (só Chrome/Edge no PC)
-const batches = {};            // pastas recebidas sem pasta de destino -> viram .zip
-const sendQueue = [];
-let sending = false;
-
 /* ---------- utilidades ---------- */
 function show(id) {
   for (const x of ['pair','waiting','transfer']) $(x).classList.toggle('hidden', x !== id);
   if (id !== 'pair') keepAwake();
+  updateQueueUI();
 }
 // Mantém a tela acesa durante o pareamento/transferência (celular bloqueado derruba a conexão)
 let wakeLock = null;
@@ -161,17 +194,76 @@ document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && $('pair').classList.contains('hidden')) keepAwake();
 });
 function fmt(n) { return n > 1e9 ? (n/1e9).toFixed(2)+' GB' : n > 1e6 ? (n/1e6).toFixed(1)+' MB' : (n/1e3).toFixed(0)+' KB'; }
+function fmtTime(s) {
+  s = Math.max(0, Math.round(s));
+  if (s < 60) return s + 's';
+  if (s < 3600) return Math.floor(s / 60) + 'min ' + (s % 60) + 's';
+  return Math.floor(s / 3600) + 'h ' + Math.floor((s % 3600) / 60) + 'min';
+}
 const MIME = { mp4:'video/mp4', mov:'video/quicktime', m4v:'video/x-m4v', webm:'video/webm', '3gp':'video/3gpp',
   jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png', gif:'image/gif', webp:'image/webp', heic:'image/heic', heif:'image/heif' };
 function mimeOf(name, fallback) { const e = name.split('.').pop().toLowerCase(); return MIME[e] || fallback || 'application/octet-stream'; }
 function isMedia(name) { const m = mimeOf(name, ''); return m.startsWith('image/') || m.startsWith('video/'); }
 const baseName = (p) => p.split('/').pop();
 
+// Medidor de velocidade/tempo restante (média móvel, atualiza a tela no máximo 5x/s)
+function meter(start) { return { t: performance.now(), b: start, speed: 0, ui: 0 }; }
+function tick(m, bytes, total, bar, info) {
+  const now = performance.now();
+  if (now - m.t >= 500) {
+    const inst = (bytes - m.b) / ((now - m.t) / 1000);
+    m.speed = m.speed ? m.speed * 0.7 + inst * 0.3 : inst;
+    m.t = now; m.b = bytes;
+  }
+  if (now - m.ui < 200 && bytes < total) return;
+  m.ui = now;
+  bar.value = total ? (bytes / total) * 100 : 100;
+  let t = `${total ? Math.floor((bytes / total) * 100) : 100}% · ${fmt(bytes)} de ${fmt(total)}`;
+  if (m.speed > 0 && bytes < total) t += ` · ${fmt(m.speed)}/s · falta ${fmtTime((total - bytes) / m.speed)}`;
+  info.textContent = t;
+}
+
+/* ---------- código de pareamento + criptografia ---------- */
+// 9 caracteres sem os que se confundem (0/O, 1/I/L): ~45 bits, contra 20 bits do código numérico antigo
+const ALPHA = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
+function newCode() {
+  let s = '';
+  while (s.length < 9) for (const b of crypto.getRandomValues(new Uint8Array(16))) if (b < 248 && s.length < 9) s += ALPHA[b % 31];
+  return s;
+}
+function normCode(s) { return String(s || '').toUpperCase().split('').filter((c) => ALPHA.includes(c)).join(''); }
+const fmtCode = (c) => c.match(/.{1,3}/g).join('-');
+
+// Do código saem a chave AES (fica só nos aparelhos) e o id da sala (vai ao servidor).
+// PBKDF2 lento: mesmo vendo o id da sala, o servidor não consegue descobrir o código por força bruta.
+const derived = new Map();
+async function derive(code) {
+  if (derived.has(code)) return derived.get(code);
+  const base = await crypto.subtle.importKey('raw', enc.encode(code), 'PBKDF2', false, ['deriveBits']);
+  const bits = new Uint8Array(await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', salt: enc.encode('p2pdrop-v2'), iterations: 150000, hash: 'SHA-256' }, base, 384));
+  const key = await crypto.subtle.importKey('raw', bits.slice(0, 32), 'AES-GCM', false, ['encrypt', 'decrypt']);
+  const room = [...bits.slice(32, 48)].map((b) => b.toString(16).padStart(2, '0')).join('');
+  const r = { key, room };
+  derived.set(code, r);
+  return r;
+}
+async function seal(bytes) {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, cryptoKey, bytes));
+  const out = new Uint8Array(12 + ct.length); out.set(iv); out.set(ct, 12);
+  return out.buffer;
+}
+async function unseal(buf) {
+  const u = new Uint8Array(buf);
+  return crypto.subtle.decrypt({ name: 'AES-GCM', iv: u.subarray(0, 12) }, cryptoKey, u.subarray(12));
+}
+
 /* ---------- ZIP (sem compressão: vídeos já são comprimidos) ---------- */
 const CRC_T = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
 function crc32(crc, buf) { let c = (crc ^ 0xFFFFFFFF) >>> 0; for (let i = 0; i < buf.length; i++) c = (c >>> 8) ^ CRC_T[(c ^ buf[i]) & 0xFF]; return (c ^ 0xFFFFFFFF) >>> 0; }
 function buildZip(files) {
-  const enc = new TextEncoder(), parts = [], central = [];
+  const parts = [], central = [];
   const d = new Date();
   const time = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
   const date = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
@@ -199,40 +291,102 @@ function buildZip(files) {
   return new Blob([...parts, ...central, e.buffer], { type: 'application/zip' });
 }
 
+/* ---------- arquivos recebidos no disco (OPFS) em vez da memória ---------- */
+const OPFS = !!(navigator.storage && navigator.storage.getDirectory && window.FileSystemFileHandle &&
+  'createWritable' in FileSystemFileHandle.prototype);
+async function recvDir() { return (await navigator.storage.getDirectory()).getDirectoryHandle('recv', { create: true }); }
+async function opfsSink() {
+  const dir = await recvDir();
+  const fname = Date.now() + '-' + rid();
+  const fh = await dir.getFileHandle(fname, { create: true });
+  const w = await fh.createWritable();
+  return {
+    write: (b) => w.write(b),
+    close: () => w.close(),
+    abort: async () => { try { await w.abort(); } catch {} try { await dir.removeEntry(fname); } catch {} },
+    file: () => fh.getFile()
+  };
+}
+// apaga recebidos com mais de 1 dia (o link de download já terá sido usado)
+async function cleanOpfs() {
+  if (!OPFS) return;
+  try {
+    const dir = await recvDir();
+    for await (const [name] of dir.entries()) if (Date.now() - parseInt(name, 10) > 864e5) await dir.removeEntry(name).catch(() => {});
+  } catch {}
+}
+
 /* ---------- sinalização + WebRTC ---------- */
-let sigChain = Promise.resolve();      // mensagens de sinalização são tratadas uma de cada vez
+let ws, pc, dc, code = null, cryptoKey = null;
+let relayOn = false, peerPresent = false;
+let inChain = Promise.resolve(), outChain = Promise.resolve();
 let reconnectTimer = null, reconnectTries = 0;
+let iceP = null;
 function sigMsg(t) { $('sigMsg').textContent = t || ''; }
 
-function connectSignal(c) {
+function loadIce() {
+  iceP = fetch(origin() + '/ice', { signal: AbortSignal.timeout(4000) })
+    .then((r) => r.json()).then((s) => (Array.isArray(s) && s.length ? s : STUN)).catch(() => STUN);
+  return iceP;
+}
+
+async function connectSignal(c) {
   code = c;
   clearTimeout(reconnectTimer);
   if (ws) { ws.onclose = null; try { ws.close(); } catch {} }
   if (pc) { try { pc.close(); } catch {} pc = null; dc = null; }
+  relayOn = false; peerPresent = false;
+  if (!window.crypto || !crypto.subtle) { sigMsg('Abra pelo endereço https para usar a criptografia.'); return; }
+  const { key, room } = await derive(c);
+  if (code !== c) return;                              // trocou de código enquanto derivava
+  cryptoKey = key;
+  if (!iceP) loadIce();
   const sock = new WebSocket(origin().replace(/^http/, 'ws'));
   ws = sock;
   sock.binaryType = 'arraybuffer';
-  sock.onopen = () => { reconnectTries = 0; sigMsg(''); sock.send(JSON.stringify({ type: 'join', code, id: CLIENT_ID })); };
+  sock.onopen = () => { reconnectTries = 0; sigMsg(''); sock.send(JSON.stringify({ type: 'join', code: room, id: CLIENT_ID })); };
   sock.onclose = () => {
     if (ws !== sock || p2pOpen()) return;          // com P2P aberto a sinalização já não é necessária
+    relayOn = false;
+    if (sending) failWaits(new Error('sem conexão com o servidor'));
     reconnectTries++;
     sigMsg(reconnectTries === 1 ? 'Conectando ao servidor… (se estiver dormindo, leva até 1 minuto)' : 'Reconectando ao servidor…');
     if (!$('transfer').classList.contains('hidden')) setState(false, 'Reconectando ao servidor…');
     reconnectTimer = setTimeout(() => connectSignal(code), Math.min(1000 * 2 ** (reconnectTries - 1), 10000));
   };
-  sock.onmessage = (e) => {
-    if (typeof e.data !== 'string') return onData(e);               // pedaço de arquivo via relay
-    let m; try { m = JSON.parse(e.data); } catch { return; }
-    // relay precisa ser síncrono para manter a ordem start/pedaços/end
-    if (m.type === 'relay') return onData({ data: JSON.stringify(m.m) });
-    sigChain = sigChain.then(() => handleSignal(m)).catch(() => {});
-  };
+  // tudo que chega do servidor é processado em ordem (decifrar é assíncrono)
+  sock.onmessage = (e) => { inChain = inChain.then(() => onServerMsg(e.data)).catch(() => {}); };
 }
 
+async function onServerMsg(data) {
+  if (typeof data !== 'string') return onData({ data: await unseal(data) });   // pedaço de arquivo via relay
+  const m = JSON.parse(data);
+  if (m.type === 'x') {                                    // mensagem cifrada do outro aparelho
+    const inner = JSON.parse(dec.decode(await unseal(unb64(m.d))));
+    return inner.t ? onData({ data: inner }) : handleSignal(inner);
+  }
+  return handleSignal(m);                                  // mensagens do próprio servidor
+}
+
+// Envio cifrado pelo servidor, em ordem (sinalização e relay)
+function sendSealed(payload) {
+  const p = outChain.then(async () => {
+    const isText = typeof payload === 'string';
+    const sealed = await seal(isText ? enc.encode(payload) : payload);
+    if (!ws || ws.readyState !== 1) throw new Error('sem conexão com o servidor');
+    ws.send(isText ? JSON.stringify({ type: 'x', d: b64(sealed) }) : sealed);
+  });
+  outChain = p.catch(() => {});
+  return p;
+}
+const sendSignal = (obj) => sendSealed(JSON.stringify(obj));
+
 async function handleSignal(m) {
+  if (m.type === 'joined' && m.peers === 2) peerPresent = true;
+  if (m.type === 'peer-joined' || m.type === 'offer') peerPresent = true;
   // quem entra por segundo arma o plano B já aqui: se a oferta nunca chegar, não fica preso em "Conectando…"
   if (m.type === 'peer-joined' || m.type === 'offer' || (m.type === 'joined' && m.peers === 2)) armFallback();
-  if (m.type === 'full') { alert('Código já em uso por 2 aparelhos.'); location.reload(); }
+  if (m.type === 'full') { alert('Esse código já está em uso por 2 aparelhos.'); forgetPair(); return; }
   if (m.type === 'busy') {
     ws.onclose = null; try { ws.close(); } catch {}
     alert('Muitas tentativas seguidas. Aguarde 1 minuto e tente de novo.'); location.reload();
@@ -243,12 +397,15 @@ async function handleSignal(m) {
     await pc.setRemoteDescription(m.sdp);
     const ans = await pc.createAnswer();
     await pc.setLocalDescription(ans);
-    ws.send(JSON.stringify({ type: 'answer', sdp: pc.localDescription }));
+    await sendSignal({ type: 'answer', sdp: pc.localDescription });
   }
   // como as mensagens são serializadas, o 'ice' só chega depois do setRemoteDescription acabar
   if (m.type === 'answer' && pc) await pc.setRemoteDescription(m.sdp);
   if (m.type === 'ice' && pc) { try { await pc.addIceCandidate(m.candidate); } catch {} }
-  if (m.type === 'peer-left' && !p2pOpen()) { abortIncoming(); setState(false, 'Outro aparelho saiu'); }
+  if (m.type === 'peer-left') {
+    peerPresent = false;
+    if (!p2pOpen()) { relayOn = false; suspendIncoming(); failWaits(new Error('o outro aparelho saiu')); setState(false, 'Outro aparelho saiu — esperando ele voltar'); }
+  }
 }
 
 let fallbackTimer = null;
@@ -256,20 +413,23 @@ function armFallback() {
   clearTimeout(fallbackTimer);
   fallbackTimer = setTimeout(() => {
     if (p2pOpen()) return;
+    relayOn = true;
     show('transfer');
-    setState(true, 'Conectado via servidor (relay, mais lento)');
+    setState(true, 'Conectado via servidor (relay criptografado, mais lento)');
+    onLinkUp();
   }, 8000);
 }
-function p2pOpen() { return dc && dc.readyState === 'open'; }
-function linkReady() { return p2pOpen() || (ws && ws.readyState === 1 && !$('transfer').classList.contains('hidden')); }
+function p2pOpen() { return !!(dc && dc.readyState === 'open'); }
+function linkReady() { return p2pOpen() || (relayOn && ws && ws.readyState === 1); }
+
 // viaP2P é fixado no início de cada arquivo: trocar de canal no meio embaralhava os pedaços
-function linkSend(data, viaP2P = p2pOpen()) {
+async function linkSend(data, viaP2P = p2pOpen()) {
+  if (!(data instanceof ArrayBuffer) && typeof data !== 'string') data = JSON.stringify(data);
   if (viaP2P) {
     if (!p2pOpen()) throw new Error('a conexão P2P caiu');
     return dc.send(data);
   }
-  if (!ws || ws.readyState !== 1) throw new Error('sem conexão com o servidor');
-  ws.send(typeof data === 'string' ? JSON.stringify({ type: 'relay', m: JSON.parse(data) }) : data);
+  return sendSealed(data);
 }
 async function drain(viaP2P) {
   if (viaP2P) {
@@ -293,16 +453,17 @@ function setState(on, text) { $('dot').classList.toggle('on', on); $('state').te
 async function startPeer(isOfferer) {
   if (pc) { try { pc.close(); } catch {} }           // reconexão: não deixa o par antigo vivo
   dc = null;
-  const conn = pc = new RTCPeerConnection(RTC_CONFIG);
+  const iceServers = await (iceP || loadIce());
+  const conn = pc = new RTCPeerConnection({ iceServers });
   conn.onicecandidate = (e) => {
-    if (pc !== conn || !e.candidate || !ws || ws.readyState !== 1) return;
-    ws.send(JSON.stringify({ type: 'ice', candidate: e.candidate }));
+    if (pc !== conn || !e.candidate) return;
+    sendSignal({ type: 'ice', candidate: e.candidate }).catch(() => {});
   };
   if (isOfferer) {
     setupChannel(conn.createDataChannel('files', { ordered: true }));
     const offer = await conn.createOffer();
     await conn.setLocalDescription(offer);
-    ws.send(JSON.stringify({ type: 'offer', sdp: conn.localDescription }));
+    await sendSignal({ type: 'offer', sdp: conn.localDescription });
   } else {
     conn.ondatachannel = (e) => { if (pc === conn) setupChannel(e.channel); };
   }
@@ -312,17 +473,69 @@ function setupChannel(ch) {
   ch.binaryType = 'arraybuffer';
   ch.bufferedAmountLowThreshold = MAX_BUFFERED / 2;
   // eventos de um canal antigo não podem sobrescrever o estado do canal novo
-  ch.onopen = () => { if (dc !== ch) return; show('transfer'); setState(true, 'Conectado direto (P2P)'); };
-  ch.onclose = () => { if (dc !== ch) return; abortIncoming(); setState(false, 'Desconectado'); };
+  ch.onopen = () => { if (dc !== ch) return; show('transfer'); setState(true, 'Conectado direto (P2P)'); onLinkUp(); };
+  ch.onclose = () => {
+    if (dc !== ch) return;
+    suspendIncoming();
+    failWaits(new Error('a conexão P2P caiu'));
+    if (ws && ws.readyState === 1 && peerPresent) {          // o servidor ainda une os dois: segue pelo relay
+      relayOn = true;
+      setState(true, 'Conectado via servidor (relay criptografado, mais lento)');
+      onLinkUp();
+    } else {
+      setState(false, 'Desconectado — reconectando…');
+      connectSignal(code);                                 // volta para a sala; o outro refaz o P2P
+    }
+  };
   ch.onmessage = onData;
 }
 
+function onLinkUp() {
+  savePair();
+  sigMsg('');
+  pump();
+}
+
+/* ---------- pareamento lembrado ---------- */
+function savePair() { if (code) store.set('p2pPair', { code, at: Date.now() }); }
+function forgetPair() {
+  store.del('p2pPair');
+  clearTimeout(reconnectTimer); clearTimeout(fallbackTimer);
+  if (ws) { ws.onclose = null; try { ws.close(); } catch {} }
+  if (pc) { try { pc.close(); } catch {} }
+  ws = pc = dc = null; code = null; relayOn = false; peerPresent = false;
+  suspendIncoming(); failWaits(new Error('desconectado'));
+  refreshSaved();
+  show('pair');
+}
+function refreshSaved() {
+  const s = store.get('p2pPair', null);
+  $('savedBox').classList.toggle('hidden', !s);
+  if (s) $('btnResume').textContent = `🔁 Reconectar ao último aparelho (${fmtCode(s.code)})`;
+}
+function openCode(c, isNew) {
+  $('myCode').textContent = fmtCode(c);
+  $('waitTitle').textContent = isNew ? 'Digite este código no outro aparelho:' : 'Esperando o outro aparelho abrir o P2P Drop…';
+  $('qr').innerHTML = '';
+  // se a biblioteca do QR não carregar (CDN fora/bloqueada) o código ainda funciona sem o QR
+  try { new QRCode($('qr'), { text: `${origin()}/#c=${c}`, width: 180, height: 180 }); } catch {}
+  show('waiting');
+  connectSignal(c);
+}
+
 /* ---------- receber ---------- */
-function addItem(label, size, { url, downloadName, galleryFiles } = {}) {
+let incoming = null;
+let destDir = null;            // pasta de destino (só Chrome/Edge no PC)
+const batches = {};            // pastas recebidas sem pasta de destino -> viram .zip
+const partials = new Map();    // fid -> arquivo pela metade, para retomar após queda
+const completed = new Set();   // fids já recebidos (reenvio após queda não duplica)
+let recvMeter = null;
+
+function addItem(label, size, { url, downloadName, galleryFiles, icon } = {}) {
   const div = document.createElement('div');
   div.className = 'item';
   const head = document.createElement(url ? 'a' : 'span');
-  head.textContent = (url ? '⬇ ' : '✔ ') + label;
+  head.textContent = (icon || (url ? '⬇' : '✔')) + ' ' + label;
   if (url) { head.href = url; head.download = downloadName; }
   const sz = document.createElement('span');
   sz.className = 'muted'; sz.textContent = ' ' + size;
@@ -344,74 +557,120 @@ async function saveToGallery(files) {
   } catch (e) { if (e.name !== 'AbortError') alert('Não foi possível abrir o menu de compartilhar: ' + e.message); }
 }
 
-// Arquivo que não terminou (conexão caiu): fecha/apaga o parcial em vez de deixá-lo pendente
-function abortIncoming() {
-  const inc = incoming; if (!inc) return;
-  incoming = null;
-  inc.chain = inc.chain.then(() => inc.sink && inc.sink.abort && inc.sink.abort()).catch(() => {});
-  $('recvProg').classList.add('hidden');
-}
+function reply(obj) { linkSend(obj).catch(() => {}); }
 
 function onData(e) {
-  if (typeof e.data === 'string') {
-    let m; try { m = JSON.parse(e.data); } catch { return; }
-    if (m.t === 'start') {
-      if (incoming) abortIncoming();
-      const inc = { ...m, got: 0, parts: [], crc: 0, sink: null, direct: !!(destDir || NATIVE) };
-      incoming = inc;
-      inc.chain = (async () => {
-        if (destDir) {                                   // PC: grava na pasta escolhida
-          const segs = m.path.split('/').filter(Boolean);
-          let d = destDir;
-          for (const s of segs.slice(0, -1)) d = await d.getDirectoryHandle(s, { create: true });
-          const fh = await d.getFileHandle(segs[segs.length - 1], { create: true });
-          const w = await fh.createWritable();
-          inc.sink = { write: (b) => w.write(b), close: () => w.close(), abort: () => w.abort() };
-        } else if (NATIVE) {                             // Android: grava na galeria/Downloads
-          const { id } = await Saver.open({ path: m.path, mime: mimeOf(m.name, m.mime) });
-          let buf = [], n = 0;
-          const flush = async () => {
-            if (!n) return;
-            const all = new Uint8Array(n); let o = 0;
-            for (const b of buf) { all.set(new Uint8Array(b), o); o += b.byteLength; }
-            buf = []; n = 0;
-            await Saver.write({ id, data: b64(all.buffer) });
-          };
-          inc.sink = {
-            write: async (b) => { buf.push(b); n += b.byteLength; if (n >= (1 << 20)) await flush(); },
-            close: async () => { await flush(); await Saver.close({ id }); },
-            abort: async () => { buf = []; n = 0; await Saver.abort({ id }); }
-          };
-        }
-      })();
-      $('recvProg').classList.remove('hidden');
-      $('recvName').textContent = `${m.path} (${fmt(m.size)})`;
-      $('recvBar').value = 0;
-    } else if (m.t === 'end' && incoming) {
-      const inc = incoming; incoming = null;
-      inc.chain = inc.chain.then(() => finishFile(inc)).catch((err) => addItem('Erro ao receber ' + inc.path + ': ' + err.message, ''));
-    }
-    return;
+  let d = e.data;
+  if (typeof d === 'string') { try { d = JSON.parse(d); } catch { return; } }
+  if (d instanceof ArrayBuffer) return onChunk(d);
+  if (!d || typeof d !== 'object') return;
+  if (d.t === 'ack') return settle('ack', d.fid, d.offset);
+  if (d.t === 'got') return settle('got', d.fid);
+  if (d.t === 'stop') { if (sendQueue[0] && sendQueue[0].fid === d.fid) cancelCurrent = true; return; }
+  if (d.t === 'cancel') return cancelIncoming(d.fid);
+  if (d.t === 'start') return beginIncoming(d);
+  if (d.t === 'end') return endIncoming(d);
+}
+
+function beginIncoming(m) {
+  if (incoming && incoming.fid !== m.fid) suspendIncoming();
+  if (completed.has(m.fid)) { incoming = { fid: m.fid, dup: true }; return reply({ t: 'ack', fid: m.fid, offset: m.size }); }
+  // retomada: o parcial pode estar guardado (queda percebida aqui) ou ainda aberto (só o outro percebeu)
+  let inc = incoming && incoming.fid === m.fid && !incoming.dup ? incoming : partials.get(m.fid);
+  if (inc && partials.get(m.fid) === inc) { partials.delete(m.fid); clearTimeout(inc.expire); }
+  if (!inc) {
+    const mode = destDir ? 'dir' : NATIVE ? 'native' : OPFS ? 'opfs' : 'mem';
+    inc = { ...m, got: 0, parts: [], crc: 0, sink: null, mode };
+    inc.chain = (async () => {
+      if (mode === 'dir') {                              // PC: grava na pasta escolhida
+        const segs = m.path.split('/').filter(Boolean);
+        let d = destDir;
+        for (const s of segs.slice(0, -1)) d = await d.getDirectoryHandle(s, { create: true });
+        const fh = await d.getFileHandle(segs[segs.length - 1], { create: true });
+        const w = await fh.createWritable();
+        inc.sink = { write: (b) => w.write(b), close: () => w.close(), abort: () => w.abort() };
+      } else if (mode === 'native') {                    // Android: grava na galeria/Downloads
+        const { id } = await Saver.open({ path: m.path, mime: mimeOf(m.name, m.mime) });
+        let buf = [], n = 0;
+        const flush = async () => {
+          if (!n) return;
+          const all = new Uint8Array(n); let o = 0;
+          for (const b of buf) { all.set(new Uint8Array(b), o); o += b.byteLength; }
+          buf = []; n = 0;
+          await Saver.write({ id, data: b64(all.buffer) });
+        };
+        inc.sink = {
+          write: async (b) => { buf.push(b); n += b.byteLength; if (n >= (1 << 20)) await flush(); },
+          close: async () => { await flush(); await Saver.close({ id }); },
+          abort: async () => { buf = []; n = 0; await Saver.abort({ id }); }
+        };
+      } else if (mode === 'opfs') {                      // navegador: grava no disco, não na memória
+        inc.sink = await opfsSink();
+      }
+    })();
   }
+  incoming = inc;
+  recvMeter = meter(inc.got);
+  $('recvProg').classList.remove('hidden');
+  $('recvName').textContent = `${inc.got ? 'Continuando' : 'Recebendo'} ${m.path} (${fmt(m.size)})`;
+  tick(recvMeter, inc.got, inc.size, $('recvBar'), $('recvInfo'));
+  reply({ t: 'ack', fid: m.fid, offset: inc.got });
+}
+
+function onChunk(buf) {
   const inc = incoming;
-  if (!inc) return;
-  inc.got += e.data.byteLength;
-  $('recvBar').value = (inc.got / inc.size) * 100;
-  if (inc.direct) inc.chain = inc.chain.then(() => inc.sink.write(e.data));
-  else {
-    inc.parts.push(e.data);
-    if (inc.batch) inc.crc = crc32(inc.crc, new Uint8Array(e.data));
+  if (!inc || inc.dup) return;
+  inc.got += buf.byteLength;
+  if (inc.batch && (inc.mode === 'opfs' || inc.mode === 'mem')) inc.crc = crc32(inc.crc, new Uint8Array(buf));
+  if (inc.mode === 'mem') inc.parts.push(buf);
+  else inc.chain = inc.chain.then(() => inc.sink.write(buf));
+  tick(recvMeter, inc.got, inc.size, $('recvBar'), $('recvInfo'));
+}
+
+function endIncoming(m) {
+  const inc = incoming;
+  if (!inc || inc.fid !== m.fid) { if (completed.has(m.fid)) reply({ t: 'got', fid: m.fid }); return; }
+  incoming = null;
+  if (inc.dup) return reply({ t: 'got', fid: m.fid });
+  if (inc.got !== inc.size) { keepPartial(inc); return; }      // faltou pedaço: o envio vai retomar daqui
+  inc.chain = inc.chain.then(() => finishFile(inc))
+    .then(() => { completed.add(inc.fid); reply({ t: 'got', fid: inc.fid }); })
+    .catch((err) => addItem('Erro ao receber ' + inc.path + ': ' + err.message, '', { icon: '⚠' }));
+}
+
+// Conexão caiu no meio: guarda o parcial por 15 min para continuar de onde parou
+function keepPartial(inc) {
+  partials.set(inc.fid, inc);
+  inc.expire = setTimeout(() => { if (partials.get(inc.fid) === inc) { partials.delete(inc.fid); abortSink(inc); } }, 15 * 60e3);
+}
+function suspendIncoming() {
+  const inc = incoming; if (!inc) return;
+  incoming = null;
+  if (!inc.dup) keepPartial(inc);
+  $('recvInfo').textContent = 'Pausado — continua quando reconectar';
+}
+function abortSink(inc) { inc.chain = inc.chain.then(() => inc.sink && inc.sink.abort && inc.sink.abort()).catch(() => {}); }
+function cancelIncoming(fid) {
+  if (incoming && incoming.fid === fid) {
+    const inc = incoming; incoming = null;
+    if (!inc.dup) { abortSink(inc); addItem(inc.path + ' (cancelado)', '', { icon: '✖' }); }
   }
+  const p = partials.get(fid);
+  if (p) { partials.delete(fid); clearTimeout(p.expire); abortSink(p); }
+  $('recvProg').classList.add('hidden');
 }
 
 async function finishFile(inc) {
   $('recvProg').classList.add('hidden');
-  if (inc.direct) {
+  if (inc.mode === 'dir' || inc.mode === 'native') {
     await inc.sink.close();
-    return addItem(`${inc.path} → ${NATIVE ? savedWhere(inc.name) : 'pasta escolhida'}`, fmt(inc.size));
+    addHistory('in', inc.path, inc.size, null);
+    return addItem(`${inc.path} → ${inc.mode === 'native' ? savedWhere(inc.name) : 'pasta escolhida'}`, fmt(inc.size));
   }
   const type = mimeOf(inc.name, inc.mime);
-  const blob = new Blob(inc.parts, { type });
+  let blob;
+  if (inc.mode === 'opfs') { await inc.sink.close(); blob = await inc.sink.file(); }
+  else blob = new Blob(inc.parts, { type });
   if (inc.batch) {                                    // arquivo de uma pasta
     const b = batches[inc.batch.id] || (batches[inc.batch.id] = { ...inc.batch, files: [] });
     b.files.push({ path: inc.path, blob, size: inc.size, crc: inc.crc });
@@ -420,54 +679,124 @@ async function finishFile(inc) {
     delete batches[inc.batch.id];
     const total = b.files.reduce((s, f) => s + f.size, 0);
     const media = b.files.filter((f) => isMedia(f.path));
+    addHistory('in', b.root + ' (pasta, ' + b.count + ' arquivos)', total, media[0] ? await makeThumb(media[0].blob, mimeOf(media[0].path)) : null);
     addItem(b.root + '.zip (' + b.count + ' arquivos)', fmt(total), {
       url: URL.createObjectURL(buildZip(b.files)), downloadName: b.root + '.zip',
       galleryFiles: media.length ? () => media.map((f) => new File([f.blob], baseName(f.path), { type: mimeOf(f.path) })) : null
     });
     return;
   }
+  const file = new File([blob], inc.name, { type });
+  addHistory('in', inc.name, inc.size, await makeThumb(file, type));
   addItem(inc.name, fmt(inc.size), {
-    url: URL.createObjectURL(blob), downloadName: inc.name,
-    galleryFiles: isMedia(inc.name) ? () => [new File([blob], inc.name, { type })] : null
+    url: URL.createObjectURL(file), downloadName: inc.name,
+    galleryFiles: isMedia(inc.name) ? () => [file] : null
   });
 }
 
 /* ---------- enviar ---------- */
-async function sendItems(items) {            // items: [{ file, path }]
+const sendQueue = [];          // { file, path, fid, batch }
+let sending = false, cancelCurrent = false, sentCount = 0, queuedCount = 0;
+const waits = new Map();       // respostas do outro aparelho: ack (de onde continuar) e got (recebido)
+function waitFor(kind, fid, ms) {
+  return new Promise((resolve, reject) => {
+    const key = kind + ':' + fid;
+    const timer = setTimeout(() => { waits.delete(key); reject(new Error('o outro aparelho não respondeu')); }, ms);
+    waits.set(key, { resolve, reject, timer });
+  });
+}
+function settle(kind, fid, val) {
+  const key = kind + ':' + fid, w = waits.get(key);
+  if (w) { clearTimeout(w.timer); waits.delete(key); w.resolve(val); }
+}
+function failWaits(err) { for (const w of waits.values()) { clearTimeout(w.timer); w.reject(err); } waits.clear(); }
+
+function enqueue(items) {            // items: [{ file, path }]
   const counts = {}, ids = {};
   for (const it of items) {
-    if (it.path.includes('/')) { const r = it.path.split('/')[0]; counts[r] = (counts[r] || 0) + 1; ids[r] = ids[r] || Math.random().toString(36).slice(2); }
+    if (it.path.includes('/')) { const r = it.path.split('/')[0]; counts[r] = (counts[r] || 0) + 1; ids[r] = ids[r] || rid(); }
   }
   for (const it of items) {
     const r = it.path.includes('/') ? it.path.split('/')[0] : null;
-    sendQueue.push({ ...it, batch: r ? { id: ids[r], root: r, count: counts[r] } : null });
+    // fid identifica o arquivo para retomar: mesmo caminho + tamanho + data = mesmo arquivo
+    const fid = [it.path, it.file.size, it.file.lastModified || 0, rid()].join('|');
+    sendQueue.push({ ...it, fid, batch: r ? { id: ids[r], root: r, count: counts[r] } : null });
+    queuedCount++;
   }
-  if (sending) return;
+  updateQueueUI();
+  pump();
+}
+
+function updateQueueUI() {
+  const n = sendQueue.length;
+  const txt = n ? `📤 ${n} arquivo${n > 1 ? 's' : ''} esperando para enviar — conecte com o outro aparelho.` : '';
+  for (const id of ['queueNotePair', 'queueNoteWait']) { $(id).textContent = txt; $(id).classList.toggle('hidden', !n); }
+  if (n && !sending && !linkReady()) {
+    $('sendProg').classList.remove('hidden');
+    $('sendName').textContent = `${n} na fila — envia sozinho quando conectar`;
+  }
+}
+
+let retryTimer = null, retryMs = 1000;
+async function pump() {
+  clearTimeout(retryTimer);
+  if (sending || !sendQueue.length) return;
+  if (!linkReady()) return updateQueueUI();
   sending = true;
   $('sendProg').classList.remove('hidden');
-  let done = 0, total = sendQueue.length;
   try {
     while (sendQueue.length) {
-      const it = sendQueue.shift(), f = it.file;
-      $('sendName').textContent = `Enviando ${++done}/${total}: ${it.path} (${fmt(f.size)})`;
-      const viaP2P = p2pOpen();                       // canal fixo durante o arquivo inteiro
-      linkSend(JSON.stringify({ t: 'start', name: f.name, size: f.size, mime: f.type, path: it.path, batch: it.batch }), viaP2P);
-      for (let off = 0; off < f.size; off += CHUNK) {
-        await drain(viaP2P);
-        linkSend(await f.slice(off, off + CHUNK).arrayBuffer(), viaP2P);
-        $('sendBar').value = (Math.min(off + CHUNK, f.size) / f.size) * 100;
+      if (!linkReady()) { $('sendName').textContent = `Conexão caiu — continua sozinho quando reconectar (${sendQueue.length} na fila)`; break; }
+      const it = sendQueue[0];
+      try {
+        await sendOne(it);
+        sendQueue.shift(); sentCount++; retryMs = 1000;
+      } catch (err) {
+        if (err && err.cancelled) { sendQueue.shift(); continue; }
+        $('sendName').textContent = `Pausado (${err.message}) — continua sozinho quando reconectar`;
+        // a conexão pode ter voltado (ex.: caiu o P2P e o relay assumiu) enquanto este envio ainda falhava:
+        // tenta de novo sozinho, esperando cada vez mais se continuar falhando
+        retryTimer = setTimeout(pump, retryMs);
+        retryMs = Math.min(retryMs * 2, 15000);
+        break;
       }
-      linkSend(JSON.stringify({ t: 'end' }), viaP2P);
-      total = Math.max(total, done + sendQueue.length);
     }
-    $('sendName').textContent = `Envio concluído ✔ (${done} arquivo${done > 1 ? 's' : ''})`;
-  } catch (err) {
-    // sem isto, 'sending' ficava true para sempre e nada mais era enviado até recarregar
-    sendQueue.length = 0;
-    $('sendName').textContent = `Envio interrompido: ${err.message}. Reconecte e envie de novo.`;
+    if (!sendQueue.length) {
+      $('sendName').textContent = sentCount ? `Envio concluído ✔ (${sentCount} arquivo${sentCount > 1 ? 's' : ''})` : 'Envio cancelado';
+      $('sendInfo').textContent = '';
+      sentCount = queuedCount = 0;
+    }
   } finally {
     sending = false;
+    updateQueueUI();
   }
+}
+
+async function sendOne(it) {
+  const f = it.file;
+  cancelCurrent = false;
+  const viaP2P = p2pOpen();                       // canal fixo durante o arquivo inteiro
+  $('sendName').textContent = `Enviando ${sentCount + 1}/${queuedCount}: ${it.path} (${fmt(f.size)})`;
+  const ackP = waitFor('ack', it.fid, 20000); ackP.catch(() => {});
+  await linkSend({ t: 'start', fid: it.fid, name: f.name, size: f.size, mime: f.type, path: it.path, batch: it.batch }, viaP2P);
+  const offset = await ackP;                      // o outro aparelho diz de onde continuar
+  const m = meter(offset);
+  if (offset) $('sendName').textContent = `Continuando ${it.path} de ${Math.floor((offset / f.size) * 100)}%`;
+  for (let off = offset; off < f.size; off += CHUNK) {
+    if (cancelCurrent) {
+      await linkSend({ t: 'cancel', fid: it.fid }, viaP2P).catch(() => {});
+      $('sendInfo').textContent = 'Cancelado';
+      throw { cancelled: true };
+    }
+    await drain(viaP2P);
+    await linkSend(await f.slice(off, Math.min(off + CHUNK, f.size)).arrayBuffer(), viaP2P);
+    tick(m, Math.min(off + CHUNK, f.size), f.size, $('sendBar'), $('sendInfo'));
+  }
+  const gotP = waitFor('got', it.fid, 120000); gotP.catch(() => {});
+  await linkSend({ t: 'end', fid: it.fid }, viaP2P);
+  await gotP;                                     // só conta como enviado quando o outro confirma
+  tick(m, f.size, f.size, $('sendBar'), $('sendInfo'));
+  addHistory('out', it.path, f.size, f instanceof Blob ? await makeThumb(f, f.type || mimeOf(f.name)) : null);
 }
 
 async function walk(entry, prefix, out) {
@@ -487,25 +816,103 @@ async function walk(entry, prefix, out) {
 function fromInput(input) {
   const items = [...input.files].map((f) => ({ file: f, path: f.webkitRelativePath || f.name }));
   input.value = '';
-  if (items.length && linkReady()) sendItems(items);
+  if (items.length) enqueue(items);
+}
+
+/* ---------- histórico (fica salvo no aparelho) ---------- */
+async function makeThumb(blob, type) {
+  try {
+    if (!/^image\//.test(type || blob.type) || /heic|heif/.test(type || '')) return null;
+    const bmp = await createImageBitmap(blob, { resizeWidth: 96, resizeQuality: 'medium' });
+    const c = document.createElement('canvas'); c.width = bmp.width; c.height = bmp.height;
+    c.getContext('2d').drawImage(bmp, 0, 0); bmp.close();
+    return c.toDataURL('image/jpeg', 0.6);
+  } catch { return null; }
+}
+function addHistory(dir, name, size, thumb) {
+  const h = store.get('p2pHistory', []);
+  h.unshift({ dir, name, size, at: Date.now(), thumb });
+  store.set('p2pHistory', h.slice(0, 100));
+  renderHistory();
+}
+function renderHistory() {
+  const h = store.get('p2pHistory', []);
+  $('histCard').classList.toggle('hidden', !h.length);
+  const list = $('histList'); list.innerHTML = '';
+  for (const e of h) {
+    const row = document.createElement('div'); row.className = 'hist';
+    const th = document.createElement('div'); th.className = 'th';
+    if (e.thumb) { const img = document.createElement('img'); img.src = e.thumb; img.alt = ''; th.append(img); }
+    else th.textContent = /pasta/.test(e.name) ? '📁' : mimeOf(e.name, '').startsWith('video/') ? '🎬' : mimeOf(e.name, '').startsWith('image/') ? '🖼️' : '📄';
+    const meta = document.createElement('div'); meta.className = 'meta';
+    const nm = document.createElement('div'); nm.className = 'nm'; nm.textContent = (e.dir === 'in' ? '⬇ ' : '⬆ ') + e.name;
+    const sub = document.createElement('div'); sub.className = 'muted';
+    sub.textContent = `${e.dir === 'in' ? 'Recebido' : 'Enviado'} · ${fmt(e.size)} · ${new Date(e.at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}`;
+    meta.append(nm, sub); row.append(th, meta); list.append(row);
+  }
+}
+
+/* ---------- compartilhar para o P2P Drop (menu "Compartilhar" do celular) ---------- */
+// PWA instalado: o service worker guarda os arquivos e abre /?share=1
+async function takeSharedPWA() {
+  try {
+    const cache = await caches.open('p2p-share');
+    const items = [];
+    for (const req of await cache.keys()) {
+      const res = await cache.match(req);
+      const blob = await res.blob();
+      const name = decodeURIComponent(res.headers.get('X-Name') || 'arquivo');
+      const file = new File([blob], name, { type: blob.type, lastModified: Number(res.headers.get('X-Mod')) || Date.now() });
+      items.push({ file, path: name });
+      await cache.delete(req);
+    }
+    if (items.length) enqueue(items);
+  } catch {}
+}
+// App Android: lê o arquivo compartilhado pelo plugin nativo, em blocos de 1 MB
+class NativeFile {
+  constructor(m) { this.id = m.id; this.name = m.name; this.size = m.size; this.type = m.mime || ''; this.lastModified = 0; this.blk = null; }
+  slice(a, b) { return { arrayBuffer: () => this.read(a, Math.min(b, this.size)) }; }
+  async read(a, b) {
+    if (!this.blk || a < this.blk.start || b > this.blk.start + this.blk.buf.byteLength) {
+      const { data } = await ShareIn.read({ id: this.id, offset: a, length: 1 << 20 });
+      this.blk = { start: a, buf: unb64(data) };
+    }
+    const s = a - this.blk.start;
+    return this.blk.buf.slice(s, s + (b - a));
+  }
+}
+async function takeSharedNative() {
+  try {
+    const { files } = await ShareIn.take();
+    if (files && files.length) enqueue(files.map((m) => ({ file: new NativeFile(m), path: m.name })));
+  } catch {}
 }
 
 /* ---------- eventos da interface ---------- */
-$('btnCreate').onclick = () => {
-  const c = String(Math.floor(100000 + Math.random() * 900000));
-  $('myCode').textContent = c;
-  $('qr').innerHTML = '';
-  // se a biblioteca do QR não carregar (CDN fora/bloqueada) o código ainda funciona sem o QR
-  try { new QRCode($('qr'), { text: `${origin()}/?c=${c}`, width: 180, height: 180 }); } catch {}
-  show('waiting');
-  connectSignal(c);
-};
+$('btnCreate').onclick = () => { const c = newCode(); store.del('p2pPair'); openCode(c, true); };
 $('btnJoin').onclick = () => {
-  const c = $('codeInput').value.trim();
-  if (c.length < 4) return;
-  show('waiting'); $('myCode').textContent = c;
-  connectSignal(c);
+  const c = normCode($('codeInput').value);
+  if (c.length !== 9) { $('codeErr').textContent = 'O código tem 9 letras/números (ex.: ABC-DEF-GHJ).'; return; }
+  $('codeErr').textContent = '';
+  openCode(c, false);
 };
+$('codeInput').oninput = () => { $('codeErr').textContent = ''; };
+$('btnResume').onclick = () => { const s = store.get('p2pPair', null); if (s) openCode(s.code, false); };
+$('btnForget').onclick = () => forgetPair();
+$('btnBack').onclick = () => forgetPair();
+$('btnNewPair').onclick = () => forgetPair();
+$('btnCancelSend').onclick = () => {
+  if (sending) { cancelCurrent = true; sendQueue.splice(1); }   // para o atual e esvazia a fila
+  else { sendQueue.length = 0; $('sendProg').classList.add('hidden'); }
+  queuedCount = sendQueue.length; updateQueueUI();
+};
+$('btnCancelRecv').onclick = () => {
+  if (!incoming) return;
+  reply({ t: 'stop', fid: incoming.fid });
+  cancelIncoming(incoming.fid);
+};
+$('btnClearHist').onclick = () => { store.del('p2pHistory'); renderHistory(); };
 $('btnMedia').onclick = () => $('fileMedia').click();
 $('btnFiles').onclick = () => $('fileAny').click();
 $('btnDir').onclick = () => $('fileDir').click();
@@ -521,7 +928,7 @@ drop.ondrop = async (e) => {
   const entries = [...e.dataTransfer.items].map((i) => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
   const items = [];
   for (const en of entries) await walk(en, '', items);
-  if (items.length && linkReady()) sendItems(items);
+  if (items.length) enqueue(items);
 };
 
 if (window.showDirectoryPicker) {
@@ -555,15 +962,31 @@ if (!standalone) {
       ev.preventDefault();
       tip.innerHTML = '';
       const b = document.createElement('button');
-      b.textContent = '📲 Instalar o app'; b.style.width = '100%';
+      b.textContent = '📲 Instalar o app (e aparecer no menu Compartilhar)'; b.style.width = '100%';
       b.onclick = () => { ev.prompt(); tip.classList.add('hidden'); };
       tip.append(b); tip.classList.remove('hidden');
     });
   }
 }
 
-const qc = new URLSearchParams(location.search).get('c');
-if (qc) { show('waiting'); $('myCode').textContent = qc; connectSignal(qc); }
+/* ---------- início ---------- */
+(async () => {
+  renderHistory();
+  refreshSaved();
+  cleanOpfs();
+  const params = new URLSearchParams(location.search);
+  const hashCode = new URLSearchParams(location.hash.slice(1)).get('c');
+  if (params.get('share')) await takeSharedPWA();
+  if (NATIVE && ShareIn) {
+    await takeSharedNative();
+    try { ShareIn.addListener('shared', () => takeSharedNative()); } catch {}
+  }
+  if (hashCode || params.has('share')) history.replaceState(null, '', location.pathname);
+  const saved = store.get('p2pPair', null);
+  if (hashCode && normCode(hashCode).length === 9) openCode(normCode(hashCode), false);   // veio do QR
+  else if (saved) openCode(saved.code, false);                                          // reconecta sozinho
+  updateQueueUI();
+})();
 </script>
 </body>
 </html>

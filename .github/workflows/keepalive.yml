@@ -1,0 +1,14 @@
+# Mantém o servidor do Render acordado: o plano grátis dorme após 15 min sem acesso
+# e o primeiro acesso depois disso demora até 1 minuto.
+# Obs.: o GitHub pausa agendamentos em repositórios sem commits por 60 dias; um commit qualquer reativa.
+name: keepalive
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - run: curl -fsS -m 90 -o /dev/null -w "HTTP %{http_code}\n" https://p2p-drop-h5kp.onrender.com/ || true
