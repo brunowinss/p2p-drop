@@ -1,0 +1,488 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>P2P Drop</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0f1115">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="P2P Drop">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<style>
+  :root { --bg:#0f1115; --card:#1a1d24; --fg:#e8eaed; --muted:#8b93a1; --accent:#4f8cff; --ok:#3ecf8e; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, sans-serif; background:var(--bg); color:var(--fg); display:flex; justify-content:center; padding:16px; }
+  main { width:100%; max-width:520px; }
+  h1 { font-size:1.4rem; margin:8px 0 16px; }
+  .card { background:var(--card); border-radius:14px; padding:18px; margin-bottom:14px; }
+  button { background:var(--accent); color:#fff; border:0; border-radius:10px; padding:12px 14px; font-size:1rem; cursor:pointer; }
+  button.sec { background:#2a2f3a; }
+  button.small { padding:6px 10px; font-size:.85rem; }
+  input[type=text] { width:100%; padding:12px; font-size:1.4rem; text-align:center; letter-spacing:.3em; border-radius:10px; border:1px solid #333; background:#0f1115; color:var(--fg); }
+  .code { font-size:2.4rem; letter-spacing:.3em; text-align:center; font-weight:700; }
+  .row { display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+  .row > * { flex:1; min-width:120px; }
+  #qr { display:flex; justify-content:center; margin-top:12px; }
+  #qr canvas, #qr img { background:#fff; padding:8px; border-radius:8px; }
+  .muted { color:var(--muted); font-size:.9rem; }
+  .drop { border:2px dashed #3a4150; border-radius:12px; padding:20px; text-align:center; }
+  .drop.over { border-color:var(--accent); }
+  progress { width:100%; height:10px; }
+  .item { padding:10px 0; border-bottom:1px solid #262b35; font-size:.95rem; word-break:break-all; }
+  .item a { color:var(--ok); }
+  .item .acts { margin-top:6px; display:flex; gap:8px; flex-wrap:wrap; }
+  .hidden { display:none; }
+  .status { display:inline-block; width:10px; height:10px; border-radius:50%; background:#666; margin-right:6px; }
+  .status.on { background:var(--ok); }
+</style>
+</head>
+<body>
+<main>
+  <h1>📡 P2P Drop</h1>
+
+  <div id="installTip" class="card hidden muted"></div>
+
+  <div id="pair" class="card">
+    <div id="serverBox" class="hidden" style="margin-bottom:14px">
+      <div class="muted">Endereço do servidor (só no app):</div>
+      <input id="serverInput" type="text" placeholder="https://..." autocapitalize="off" autocorrect="off" spellcheck="false"
+             style="font-size:.95rem; letter-spacing:0; text-align:left; margin-top:6px">
+    </div>
+    <button id="btnCreate" style="width:100%">Criar código (este aparelho envia/recebe)</button>
+    <p class="muted" style="text-align:center">ou entre com o código do outro aparelho</p>
+    <input id="codeInput" type="text" maxlength="6" inputmode="numeric" placeholder="000000">
+    <div class="row"><button id="btnJoin" class="sec">Conectar</button></div>
+  </div>
+
+  <div id="waiting" class="card hidden">
+    <div class="muted" style="text-align:center">Digite este código no outro aparelho:</div>
+    <div class="code" id="myCode"></div>
+    <div id="qr"></div>
+    <p class="muted" style="text-align:center">Ou escaneie o QR com a câmera do celular</p>
+  </div>
+
+  <div id="transfer" class="hidden">
+    <div class="card"><span class="status" id="dot"></span><span id="state">Conectando…</span></div>
+
+    <div class="card">
+      <b>Enviar</b>
+      <div class="drop" id="drop" style="margin-top:10px">
+        <span class="muted">Arraste arquivos ou pastas aqui</span>
+        <div class="row">
+          <button id="btnMedia">📷 Fotos e vídeos</button>
+          <button id="btnFiles" class="sec">📄 Arquivos</button>
+          <button id="btnDir" class="sec">📁 Pasta</button>
+        </div>
+        <input id="fileMedia" type="file" multiple accept="image/*,video/*" class="hidden">
+        <input id="fileAny" type="file" multiple class="hidden">
+        <input id="fileDir" type="file" webkitdirectory multiple class="hidden">
+      </div>
+      <div id="sendProg" class="hidden" style="margin-top:12px">
+        <div class="muted" id="sendName"></div><progress id="sendBar" value="0" max="100"></progress>
+      </div>
+    </div>
+
+    <div class="card">
+      <b>Receber</b>
+      <div id="destBox" class="hidden" style="margin-top:10px">
+        <button id="btnDest" class="sec" style="width:100%">📂 Escolher pasta de destino neste PC</button>
+        <div class="muted" id="destName" style="margin-top:6px">Sem pasta: os arquivos chegam como download (pastas viram .zip).</div>
+      </div>
+      <div id="recvProg" class="hidden" style="margin-top:10px">
+        <div class="muted" id="recvName"></div><progress id="recvBar" value="0" max="100"></progress>
+      </div>
+      <div id="list"></div>
+    </div>
+  </div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const CHUNK = 64 * 1024;
+const MAX_BUFFERED = 1 * 1024 * 1024;
+const CLIENT_ID = Math.random().toString(36).slice(2) + Date.now().toString(36);
+const RTC_CONFIG = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun.cloudflare.com:3478' }
+    // Para P2P em redes restritivas, adicione um servidor TURN aqui.
+  ]
+};
+
+// Dentro do app Android (Capacitor) a página é local; o servidor é configurável e os arquivos
+// recebidos são gravados direto na galeria/Downloads pelo plugin nativo "Saver".
+const NATIVE = !!(window.Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform());
+const Saver = NATIVE ? Capacitor.Plugins.Saver : null;
+const DEFAULT_SERVER = 'https://matrix-pure-pike-controlling.trycloudflare.com';
+function origin() {
+  if (!NATIVE) return location.origin;
+  let s = ($('serverInput').value || '').trim().replace(/\/+$/, '');
+  if (!/^https?:\/\//.test(s)) s = 'https://' + s;
+  try { localStorage.setItem('p2pServer', s); } catch {}
+  return s;
+}
+function b64(buf) {
+  const u = new Uint8Array(buf); let s = '';
+  for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+  return btoa(s);
+}
+function savedWhere(name) {
+  const m = mimeOf(name, '');
+  return m.startsWith('image/') ? 'Galeria (Pictures/P2PDrop)' : m.startsWith('video/') ? 'Galeria (Movies/P2PDrop)' : 'Downloads/P2PDrop';
+}
+
+let ws, pc, dc, code = null;
+let incoming = null;
+let destDir = null;            // pasta de destino (só Chrome/Edge no PC)
+const batches = {};            // pastas recebidas sem pasta de destino -> viram .zip
+const sendQueue = [];
+let sending = false;
+
+/* ---------- utilidades ---------- */
+function show(id) { for (const x of ['pair','waiting','transfer']) $(x).classList.toggle('hidden', x !== id); }
+function fmt(n) { return n > 1e9 ? (n/1e9).toFixed(2)+' GB' : n > 1e6 ? (n/1e6).toFixed(1)+' MB' : (n/1e3).toFixed(0)+' KB'; }
+const MIME = { mp4:'video/mp4', mov:'video/quicktime', m4v:'video/x-m4v', webm:'video/webm', '3gp':'video/3gpp',
+  jpg:'image/jpeg', jpeg:'image/jpeg', png:'image/png', gif:'image/gif', webp:'image/webp', heic:'image/heic', heif:'image/heif' };
+function mimeOf(name, fallback) { const e = name.split('.').pop().toLowerCase(); return MIME[e] || fallback || 'application/octet-stream'; }
+function isMedia(name) { const m = mimeOf(name, ''); return m.startsWith('image/') || m.startsWith('video/'); }
+const baseName = (p) => p.split('/').pop();
+
+/* ---------- ZIP (sem compressão: vídeos já são comprimidos) ---------- */
+const CRC_T = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(crc, buf) { let c = (crc ^ 0xFFFFFFFF) >>> 0; for (let i = 0; i < buf.length; i++) c = (c >>> 8) ^ CRC_T[(c ^ buf[i]) & 0xFF]; return (c ^ 0xFFFFFFFF) >>> 0; }
+function buildZip(files) {
+  const enc = new TextEncoder(), parts = [], central = [];
+  const d = new Date();
+  const time = (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1);
+  const date = ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate();
+  let offset = 0;
+  for (const f of files) {
+    const name = enc.encode(f.path);
+    const lh = new DataView(new ArrayBuffer(30));
+    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true);
+    lh.setUint16(10, time, true); lh.setUint16(12, date, true);
+    lh.setUint32(14, f.crc, true); lh.setUint32(18, f.size, true); lh.setUint32(22, f.size, true);
+    lh.setUint16(26, name.length, true);
+    parts.push(lh.buffer, name, f.blob);
+    const ch = new DataView(new ArrayBuffer(46));
+    ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true);
+    ch.setUint16(12, time, true); ch.setUint16(14, date, true);
+    ch.setUint32(16, f.crc, true); ch.setUint32(20, f.size, true); ch.setUint32(24, f.size, true);
+    ch.setUint16(28, name.length, true); ch.setUint32(42, offset, true);
+    central.push(ch.buffer, name);
+    offset += 30 + name.length + f.size;
+  }
+  let csize = 0; for (const c of central) csize += c.byteLength;
+  const e = new DataView(new ArrayBuffer(22));
+  e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true);
+  e.setUint32(12, csize, true); e.setUint32(16, offset, true);
+  return new Blob([...parts, ...central, e.buffer], { type: 'application/zip' });
+}
+
+/* ---------- sinalização + WebRTC ---------- */
+function connectSignal(c) {
+  code = c;
+  if (ws) { try { ws.close(); } catch {} }
+  if (pc) { try { pc.close(); } catch {} pc = null; dc = null; }
+  ws = new WebSocket(origin().replace(/^http/, 'ws'));
+  ws.binaryType = 'arraybuffer';
+  ws.onopen = () => ws.send(JSON.stringify({ type: 'join', code, id: CLIENT_ID }));
+  ws.onmessage = async (e) => {
+    if (typeof e.data !== 'string') return onData(e);               // pedaço de arquivo via relay
+    const m = JSON.parse(e.data);
+    if (m.type === 'relay') return onData({ data: JSON.stringify(m.m) });
+    if (m.type === 'peer-joined' || m.type === 'offer') armFallback();
+    if (m.type === 'full') { alert('Código já em uso por 2 aparelhos.'); location.reload(); }
+    if (m.type === 'peer-joined') startPeer(true);
+    if (m.type === 'offer') {
+      startPeer(false);
+      await pc.setRemoteDescription(m.sdp);
+      const ans = await pc.createAnswer();
+      await pc.setLocalDescription(ans);
+      ws.send(JSON.stringify({ type: 'answer', sdp: pc.localDescription }));
+    }
+    if (m.type === 'answer') await pc.setRemoteDescription(m.sdp);
+    if (m.type === 'ice' && pc) { try { await pc.addIceCandidate(m.candidate); } catch {} }
+    if (m.type === 'peer-left') setState(false, 'Outro aparelho saiu');
+  };
+}
+
+let fallbackTimer = null;
+function armFallback() {
+  clearTimeout(fallbackTimer);
+  fallbackTimer = setTimeout(() => {
+    if (p2pOpen()) return;
+    show('transfer');
+    setState(true, 'Conectado via servidor (relay, mais lento)');
+  }, 8000);
+}
+function p2pOpen() { return dc && dc.readyState === 'open'; }
+function linkReady() { return p2pOpen() || (ws && ws.readyState === 1 && !$('transfer').classList.contains('hidden')); }
+function linkSend(data) {
+  if (p2pOpen()) return dc.send(data);
+  ws.send(typeof data === 'string' ? JSON.stringify({ type: 'relay', m: JSON.parse(data) }) : data);
+}
+async function drain() {
+  if (p2pOpen()) {
+    if (dc.bufferedAmount > MAX_BUFFERED)
+      await new Promise((r) => { dc.onbufferedamountlow = () => { dc.onbufferedamountlow = null; r(); }; });
+  } else {
+    while (ws.bufferedAmount > MAX_BUFFERED) await new Promise((r) => setTimeout(r, 30));
+  }
+}
+function setState(on, text) { $('dot').classList.toggle('on', on); $('state').textContent = text; }
+
+async function startPeer(isOfferer) {
+  pc = new RTCPeerConnection(RTC_CONFIG);
+  pc.onicecandidate = (e) => e.candidate && ws.send(JSON.stringify({ type: 'ice', candidate: e.candidate }));
+  if (isOfferer) {
+    setupChannel(pc.createDataChannel('files', { ordered: true }));
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    ws.send(JSON.stringify({ type: 'offer', sdp: pc.localDescription }));
+  } else {
+    pc.ondatachannel = (e) => setupChannel(e.channel);
+  }
+}
+function setupChannel(ch) {
+  dc = ch;
+  dc.binaryType = 'arraybuffer';
+  dc.bufferedAmountLowThreshold = MAX_BUFFERED / 2;
+  dc.onopen = () => { show('transfer'); setState(true, 'Conectado direto (P2P)'); };
+  dc.onclose = () => setState(false, 'Desconectado');
+  dc.onmessage = onData;
+}
+
+/* ---------- receber ---------- */
+function addItem(label, size, { url, downloadName, galleryFiles } = {}) {
+  const div = document.createElement('div');
+  div.className = 'item';
+  const head = document.createElement(url ? 'a' : 'span');
+  head.textContent = (url ? '⬇ ' : '✔ ') + label;
+  if (url) { head.href = url; head.download = downloadName; }
+  const sz = document.createElement('span');
+  sz.className = 'muted'; sz.textContent = ' ' + size;
+  div.append(head, sz);
+  if (galleryFiles) {
+    const acts = document.createElement('div'); acts.className = 'acts';
+    const b = document.createElement('button');
+    b.className = 'small sec'; b.textContent = '📱 Salvar na galeria';
+    b.onclick = () => saveToGallery(galleryFiles());
+    acts.append(b); div.append(acts);
+  }
+  $('list').prepend(div);
+}
+
+async function saveToGallery(files) {
+  try {
+    if (navigator.canShare && navigator.canShare({ files })) await navigator.share({ files });
+    else alert('Este navegador não permite salvar direto na galeria. Use o botão de baixar.');
+  } catch (e) { if (e.name !== 'AbortError') alert('Não foi possível abrir o menu de compartilhar: ' + e.message); }
+}
+
+function onData(e) {
+  if (typeof e.data === 'string') {
+    const m = JSON.parse(e.data);
+    if (m.t === 'start') {
+      const inc = { ...m, got: 0, parts: [], crc: 0, sink: null, direct: !!(destDir || NATIVE) };
+      incoming = inc;
+      inc.chain = (async () => {
+        if (destDir) {                                   // PC: grava na pasta escolhida
+          const segs = m.path.split('/').filter(Boolean);
+          let d = destDir;
+          for (const s of segs.slice(0, -1)) d = await d.getDirectoryHandle(s, { create: true });
+          const fh = await d.getFileHandle(segs[segs.length - 1], { create: true });
+          const w = await fh.createWritable();
+          inc.sink = { write: (b) => w.write(b), close: () => w.close() };
+        } else if (NATIVE) {                             // Android: grava na galeria/Downloads
+          const { id } = await Saver.open({ path: m.path, mime: mimeOf(m.name, m.mime) });
+          let buf = [], n = 0;
+          const flush = async () => {
+            if (!n) return;
+            const all = new Uint8Array(n); let o = 0;
+            for (const b of buf) { all.set(new Uint8Array(b), o); o += b.byteLength; }
+            buf = []; n = 0;
+            await Saver.write({ id, data: b64(all.buffer) });
+          };
+          inc.sink = {
+            write: async (b) => { buf.push(b); n += b.byteLength; if (n >= (1 << 20)) await flush(); },
+            close: async () => { await flush(); await Saver.close({ id }); }
+          };
+        }
+      })();
+      $('recvProg').classList.remove('hidden');
+      $('recvName').textContent = `${m.path} (${fmt(m.size)})`;
+      $('recvBar').value = 0;
+    } else if (m.t === 'end' && incoming) {
+      const inc = incoming; incoming = null;
+      inc.chain = inc.chain.then(() => finishFile(inc)).catch((err) => addItem('Erro ao receber ' + inc.path + ': ' + err.message, ''));
+    }
+    return;
+  }
+  const inc = incoming;
+  if (!inc) return;
+  inc.got += e.data.byteLength;
+  $('recvBar').value = (inc.got / inc.size) * 100;
+  if (inc.direct) inc.chain = inc.chain.then(() => inc.sink.write(e.data));
+  else {
+    inc.parts.push(e.data);
+    if (inc.batch) inc.crc = crc32(inc.crc, new Uint8Array(e.data));
+  }
+}
+
+async function finishFile(inc) {
+  $('recvProg').classList.add('hidden');
+  if (inc.direct) {
+    await inc.sink.close();
+    return addItem(`${inc.path} → ${NATIVE ? savedWhere(inc.name) : 'pasta escolhida'}`, fmt(inc.size));
+  }
+  const type = mimeOf(inc.name, inc.mime);
+  const blob = new Blob(inc.parts, { type });
+  if (inc.batch) {                                    // arquivo de uma pasta
+    const b = batches[inc.batch.id] || (batches[inc.batch.id] = { ...inc.batch, files: [] });
+    b.files.push({ path: inc.path, blob, size: inc.size, crc: inc.crc });
+    $('recvName').textContent = `Pasta ${b.root}: ${b.files.length}/${b.count}`;
+    if (b.files.length < b.count) return;
+    delete batches[inc.batch.id];
+    const total = b.files.reduce((s, f) => s + f.size, 0);
+    const media = b.files.filter((f) => isMedia(f.path));
+    addItem(b.root + '.zip (' + b.count + ' arquivos)', fmt(total), {
+      url: URL.createObjectURL(buildZip(b.files)), downloadName: b.root + '.zip',
+      galleryFiles: media.length ? () => media.map((f) => new File([f.blob], baseName(f.path), { type: mimeOf(f.path) })) : null
+    });
+    return;
+  }
+  addItem(inc.name, fmt(inc.size), {
+    url: URL.createObjectURL(blob), downloadName: inc.name,
+    galleryFiles: isMedia(inc.name) ? () => [new File([blob], inc.name, { type })] : null
+  });
+}
+
+/* ---------- enviar ---------- */
+async function sendItems(items) {            // items: [{ file, path }]
+  const counts = {}, ids = {};
+  for (const it of items) {
+    if (it.path.includes('/')) { const r = it.path.split('/')[0]; counts[r] = (counts[r] || 0) + 1; ids[r] = ids[r] || Math.random().toString(36).slice(2); }
+  }
+  for (const it of items) {
+    const r = it.path.includes('/') ? it.path.split('/')[0] : null;
+    sendQueue.push({ ...it, batch: r ? { id: ids[r], root: r, count: counts[r] } : null });
+  }
+  if (sending) return;
+  sending = true;
+  $('sendProg').classList.remove('hidden');
+  let done = 0, total = sendQueue.length;
+  while (sendQueue.length) {
+    const it = sendQueue.shift(), f = it.file;
+    $('sendName').textContent = `Enviando ${++done}/${total}: ${it.path} (${fmt(f.size)})`;
+    linkSend(JSON.stringify({ t: 'start', name: f.name, size: f.size, mime: f.type, path: it.path, batch: it.batch }));
+    for (let off = 0; off < f.size; off += CHUNK) {
+      await drain();
+      linkSend(await f.slice(off, off + CHUNK).arrayBuffer());
+      $('sendBar').value = (Math.min(off + CHUNK, f.size) / f.size) * 100;
+    }
+    linkSend(JSON.stringify({ t: 'end' }));
+    total = Math.max(total, done + sendQueue.length);
+  }
+  $('sendName').textContent = `Envio concluído ✔ (${done} arquivo${done > 1 ? 's' : ''})`;
+  sending = false;
+}
+
+async function walk(entry, prefix, out) {
+  if (entry.isFile) {
+    const file = await new Promise((res, rej) => entry.file(res, rej));
+    out.push({ file, path: prefix + entry.name });
+  } else if (entry.isDirectory) {
+    const reader = entry.createReader();
+    let batch;
+    do {
+      batch = await new Promise((res, rej) => reader.readEntries(res, rej));
+      for (const e of batch) await walk(e, prefix + entry.name + '/', out);
+    } while (batch.length);
+  }
+}
+
+function fromInput(input) {
+  const items = [...input.files].map((f) => ({ file: f, path: f.webkitRelativePath || f.name }));
+  input.value = '';
+  if (items.length && linkReady()) sendItems(items);
+}
+
+/* ---------- eventos da interface ---------- */
+$('btnCreate').onclick = () => {
+  const c = String(Math.floor(100000 + Math.random() * 900000));
+  $('myCode').textContent = c;
+  new QRCode($('qr'), { text: `${origin()}/?c=${c}`, width: 180, height: 180 });
+  show('waiting');
+  connectSignal(c);
+};
+$('btnJoin').onclick = () => {
+  const c = $('codeInput').value.trim();
+  if (c.length < 4) return;
+  show('waiting'); $('myCode').textContent = c;
+  connectSignal(c);
+};
+$('btnMedia').onclick = () => $('fileMedia').click();
+$('btnFiles').onclick = () => $('fileAny').click();
+$('btnDir').onclick = () => $('fileDir').click();
+$('fileMedia').onchange = (e) => fromInput(e.target);
+$('fileAny').onchange = (e) => fromInput(e.target);
+$('fileDir').onchange = (e) => fromInput(e.target);
+
+const drop = $('drop');
+drop.ondragover = (e) => { e.preventDefault(); drop.classList.add('over'); };
+drop.ondragleave = () => drop.classList.remove('over');
+drop.ondrop = async (e) => {
+  e.preventDefault(); drop.classList.remove('over');
+  const entries = [...e.dataTransfer.items].map((i) => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
+  const items = [];
+  for (const en of entries) await walk(en, '', items);
+  if (items.length && linkReady()) sendItems(items);
+};
+
+if (window.showDirectoryPicker) {
+  $('destBox').classList.remove('hidden');
+  $('btnDest').onclick = async () => {
+    try {
+      destDir = await showDirectoryPicker({ mode: 'readwrite' });
+      $('destName').textContent = 'Salvando em: ' + destDir.name + ' (pastas são recriadas como estão)';
+    } catch {}
+  };
+}
+
+/* ---------- PWA: instalar na tela de início ---------- */
+if (NATIVE) {
+  $('serverBox').classList.remove('hidden');
+  $('btnDir').classList.add('hidden');                 // WebView do Android não escolhe pastas
+  let s = ''; try { s = localStorage.getItem('p2pServer') || ''; } catch {}
+  $('serverInput').value = s || DEFAULT_SERVER;
+  $('destBox').classList.add('hidden');
+}
+if ('serviceWorker' in navigator && !NATIVE) navigator.serviceWorker.register('/sw.js').catch(() => {});
+const standalone = NATIVE || window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+if (!standalone) {
+  const tip = $('installTip');
+  if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
+    tip.textContent = '📲 Para instalar: toque em Compartilhar (□↑) no Safari → "Adicionar à Tela de Início".';
+    tip.classList.remove('hidden');
+  } else {
+    window.addEventListener('beforeinstallprompt', (ev) => {
+      ev.preventDefault();
+      tip.innerHTML = '';
+      const b = document.createElement('button');
+      b.textContent = '📲 Instalar o app'; b.style.width = '100%';
+      b.onclick = () => { ev.prompt(); tip.classList.add('hidden'); };
+      tip.append(b); tip.classList.remove('hidden');
+    });
+  }
+}
+
+const qc = new URLSearchParams(location.search).get('c');
+if (qc) { show('waiting'); $('myCode').textContent = qc; connectSignal(qc); }
+</script>
+</body>
+</html>
