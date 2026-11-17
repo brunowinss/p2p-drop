@@ -65,8 +65,8 @@
       <div class="row" style="margin-top:6px"><button id="btnForget" class="small sec">Esquecer esse aparelho</button></div>
     </div>
     <button id="btnCreate" style="width:100%">Criar código (este aparelho envia/recebe)</button>
-    <p class="muted" style="text-align:center">ou digite o código do outro aparelho — ou um código seu, igual nos dois aparelhos (só na 1ª vez)</p>
-    <input id="codeInput" type="text" maxlength="40" placeholder="ex.: BRUNOPC1" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false">
+    <p class="muted" style="text-align:center">ou digite o código do outro aparelho (só na 1ª vez — depois conecta sozinho)</p>
+    <input id="codeInput" type="text" maxlength="32" placeholder="123" inputmode="numeric" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false">
     <p class="err" id="codeErr"></p>
     <div class="row"><button id="btnJoin" class="sec">Conectar</button></div>
     <div id="queueNotePair" class="note hidden"></div>
@@ -151,8 +151,17 @@ const CLIENT_ID = store.get('p2pDeviceId', null) || (() => { const id = rid(); s
 // Dentro do app Android (Capacitor) a página é local; o servidor é configurável e os arquivos
 // recebidos são gravados direto na galeria/Downloads pelo plugin nativo "Saver".
 const NATIVE = !!(window.Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform());
-const Saver = NATIVE ? Capacitor.Plugins.Saver : null;
-const ShareIn = NATIVE ? Capacitor.Plugins.ShareIn : null;
+// Plugins nativos chamados direto pela ponte do Capacitor. (Capacitor.Plugins só é preenchido pela
+// biblioteca @capacitor/core, que esta página não carrega: por isso o Saver "não existia" e nada ia para a galeria.)
+function nativePlugin(name) {
+  return new Proxy({}, { get: (_, method) => method === 'addListener'
+    ? (eventName, cb) => Capacitor.addListener(name, eventName, cb)
+    : (opts) => Capacitor.nativePromise(name, method, opts || {}) });
+}
+const Saver = NATIVE ? nativePlugin('Saver') : null;
+const ShareIn = NATIVE ? nativePlugin('ShareIn') : null;
+const IS_IOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const IS_ANDROID = !NATIVE && /Android/i.test(navigator.userAgent);
 const DEFAULT_SERVER = 'https://p2p-drop-h5kp.onrender.com';
 function origin() {
   if (!NATIVE) return location.origin;
@@ -221,17 +230,16 @@ function tick(m, bytes, total, bar, info) {
 }
 
 /* ---------- código de pareamento + criptografia ---------- */
-// 9 caracteres sem os que se confundem (0/O, 1/I/L): ~45 bits, contra 20 bits do código numérico antigo
-const ALPHA = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
 function newCode() {
   let s = '';
-  while (s.length < 9) for (const b of crypto.getRandomValues(new Uint8Array(16))) if (b < 248 && s.length < 9) s += ALPHA[b % 31];
+  // 3 dígitos: fácil de digitar. O pareamento fica salvo, então só se digita uma vez por aparelho.
+  while (s.length < 3) for (const b of crypto.getRandomValues(new Uint8Array(8))) if (b < 250 && s.length < 3) s += String(b % 10);
   return s;
 }
-// Aceita também um código pessoal fácil de lembrar (6 a 32 letras/números), digitado uma vez por aparelho
+// Aceita também um código pessoal (3 a 32 letras/números), digitado uma vez por aparelho
 function normCode(s) { return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 32); }
-const isCode = (c) => c.length >= 6 && c.length <= 32;
-const fmtCode = (c) => (c.length === 9 && [...c].every((x) => ALPHA.includes(x)) ? c.match(/.{1,3}/g).join('-') : c);
+const isCode = (c) => c.length >= 3 && c.length <= 32;
+const fmtCode = (c) => c;
 
 // Do código saem a chave AES (fica só nos aparelhos) e o id da sala (vai ao servidor).
 // PBKDF2 lento: mesmo vendo o id da sala, o servidor não consegue descobrir o código por força bruta.
@@ -550,7 +558,7 @@ function addItem(label, size, { url, downloadName, galleryFiles, icon } = {}) {
   if (galleryFiles) {
     const acts = document.createElement('div'); acts.className = 'acts';
     const b = document.createElement('button');
-    b.className = 'small sec'; b.textContent = '📱 Salvar na galeria';
+    b.className = 'small sec'; b.textContent = '📱 Salvar nas Fotos (toque em "Salvar")';
     b.onclick = () => saveToGallery(galleryFiles());
     acts.append(b); div.append(acts);
   }
@@ -687,18 +695,28 @@ async function finishFile(inc) {
     const total = b.files.reduce((s, f) => s + f.size, 0);
     const media = b.files.filter((f) => isMedia(f.path));
     addHistory('in', b.root + ' (pasta, ' + b.count + ' arquivos)', total, media[0] ? await makeThumb(media[0].blob, mimeOf(media[0].path)) : null);
-    addItem(b.root + '.zip (' + b.count + ' arquivos)', fmt(total), {
+    // Android (navegador): fotos/vídeos da pasta baixam sozinhos e aparecem na Galeria (álbum Download)
+    if (IS_ANDROID) for (const f of media) downloadNow(URL.createObjectURL(f.blob), baseName(f.path));
+    addItem(b.root + '.zip (' + b.count + ' arquivos)' + (IS_ANDROID && media.length ? ` — ${media.length} foto(s)/vídeo(s) já baixado(s)` : ''), fmt(total), {
       url: URL.createObjectURL(buildZip(b.files)), downloadName: b.root + '.zip',
-      galleryFiles: media.length ? () => media.map((f) => new File([f.blob], baseName(f.path), { type: mimeOf(f.path) })) : null
+      galleryFiles: IS_IOS && media.length ? () => media.map((f) => new File([f.blob], baseName(f.path), { type: mimeOf(f.path) })) : null
     });
     return;
   }
   const file = new File([blob], inc.name, { type });
+  const url = URL.createObjectURL(file);
   addHistory('in', inc.name, inc.size, await makeThumb(file, type));
-  addItem(inc.name, fmt(inc.size), {
-    url: URL.createObjectURL(file), downloadName: inc.name,
-    galleryFiles: isMedia(inc.name) ? () => [file] : null
+  if (IS_ANDROID) downloadNow(url, inc.name);           // sem menu: vai direto para Download (aparece na Galeria)
+  addItem(inc.name + (IS_ANDROID ? ' — baixado (aparece na Galeria)' : ''), fmt(inc.size), {
+    url, downloadName: inc.name,
+    // iPhone: a Apple só deixa salvar nas Fotos pelo menu de compartilhar
+    galleryFiles: IS_IOS && isMedia(inc.name) ? () => [file] : null
   });
+}
+function downloadNow(url, name) {
+  const a = document.createElement('a');
+  a.href = url; a.download = name; a.style.display = 'none';
+  document.body.append(a); a.click(); a.remove();
 }
 
 /* ---------- enviar ---------- */
@@ -900,7 +918,7 @@ async function takeSharedNative() {
 $('btnCreate').onclick = () => { const c = newCode(); store.del('p2pPair'); openCode(c, true); };
 $('btnJoin').onclick = () => {
   const c = normCode($('codeInput').value);
-  if (!isCode(c)) { $('codeErr').textContent = 'Use pelo menos 6 letras/números (o código criado ou um seu, ex.: BRUNOPC1).'; return; }
+  if (!isCode(c)) { $('codeErr').textContent = 'Digite o código de 3 números do outro aparelho.'; return; }
   $('codeErr').textContent = '';
   openCode(c, false);
 };
