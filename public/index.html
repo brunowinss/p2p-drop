@@ -5,256 +5,334 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>P2P Drop</title>
 <link rel="manifest" href="/manifest.json">
-<meta name="theme-color" content="#070b16">
+<meta name="theme-color" content="#0a0c10">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="P2P Drop">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg:#070b16; --card:rgba(18,24,44,.72); --card2:rgba(255,255,255,.04); --line:rgba(255,255,255,.08);
-    --fg:#eef1f8; --muted:#8e98b3; --ok:#34d399; --err:#ff6b81;
-    --grad:linear-gradient(135deg,#6366f1 0%,#8b5cf6 45%,#ec4899 100%);
-    --grad2:linear-gradient(135deg,#22d3ee 0%,#6366f1 100%);
-    --r:20px;
+    --bg:#0a0c10; --surface:#12151c; --surface2:#191d27; --line:#242a37; --line2:#2f3646;
+    --fg:#eceff5; --muted:#8a93a6; --dim:#5d6578;
+    --accent:#7c6cff; --accent-2:#9b8cff; --accent-bg:rgba(124,108,255,.12);
+    --ok:#3ddc97; --ok-bg:rgba(61,220,151,.12); --warn:#f5b84b; --warn-bg:rgba(245,184,75,.12); --err:#ff6b7d; --err-bg:rgba(255,107,125,.12);
+    --img:#a78bfa; --img-bg:rgba(167,139,250,.14); --vid:#f472b6; --vid-bg:rgba(244,114,182,.14);
+    --doc:#60a5fa; --doc-bg:rgba(96,165,250,.14); --zip:#fbbf24; --zip-bg:rgba(251,191,36,.14);
   }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
   html { background:var(--bg); }
   body {
-    margin:0; min-height:100vh; color:var(--fg);
-    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    background:
-      radial-gradient(900px 500px at 10% -10%, rgba(139,92,246,.28), transparent 60%),
-      radial-gradient(800px 500px at 110% 10%, rgba(34,211,238,.18), transparent 60%),
-      radial-gradient(700px 600px at 50% 120%, rgba(236,72,153,.16), transparent 60%),
-      var(--bg);
-    background-attachment: fixed;
+    margin:0; min-height:100vh; color:var(--fg); font-size:15px; line-height:1.45;
+    font-family:Inter, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing:antialiased;
+    background:radial-gradient(1000px 420px at 50% -180px, rgba(124,108,255,.20), transparent 70%), var(--bg);
+    background-repeat:no-repeat;
     display:flex; justify-content:center;
     /* iPhone: respeita o notch e a barra de baixo */
-    padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(24px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+    padding:max(14px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(28px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
   }
-  main { width:100%; max-width:540px; }
-  @keyframes rise { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
-  @keyframes pulse { 0% { box-shadow:0 0 0 0 rgba(52,211,153,.55); } 70% { box-shadow:0 0 0 10px rgba(52,211,153,0); } 100% { box-shadow:0 0 0 0 rgba(52,211,153,0); } }
-  @keyframes ring { 0% { transform:scale(.85); opacity:.9; } 100% { transform:scale(2.2); opacity:0; } }
+  main { width:100%; max-width:480px; }
+  .i { width:20px; height:20px; flex:none; fill:none; stroke:currentColor; stroke-width:1.9; stroke-linecap:round; stroke-linejoin:round; }
+  .i.sm { width:16px; height:16px; }
+  .i.lg { width:26px; height:26px; }
+  @keyframes fade { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  @keyframes glow { 0%,100% { box-shadow:0 0 0 0 rgba(61,220,151,.45); } 50% { box-shadow:0 0 0 6px rgba(61,220,151,0); } }
   @media (prefers-reduced-motion: reduce) { * { animation:none !important; transition:none !important; } }
 
-  /* topo */
-  .top { display:flex; align-items:center; gap:12px; margin:4px 2px 18px; }
-  .logo { width:46px; height:46px; border-radius:14px; background:var(--grad); display:grid; place-items:center; box-shadow:0 8px 24px rgba(139,92,246,.45); flex:none; }
-  .logo svg { width:26px; height:26px; }
-  .brand h1 { margin:0; font-size:1.45rem; letter-spacing:-.02em; background:linear-gradient(90deg,#fff,#c4b5fd 60%,#f9a8d4); -webkit-background-clip:text; background-clip:text; color:transparent; }
-  .brand p { margin:2px 0 0; color:var(--muted); font-size:.82rem; }
+  /* ---------- cabeçalho ---------- */
+  .appbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin:2px 0 18px; }
+  .brand { display:flex; align-items:center; gap:11px; }
+  .logo { width:38px; height:38px; border-radius:11px; display:grid; place-items:center; color:#fff;
+    background:linear-gradient(140deg, var(--accent-2), var(--accent) 55%, #5b4ce0); box-shadow:0 6px 18px rgba(124,108,255,.35), inset 0 1px 0 rgba(255,255,255,.25); }
+  .brand h1 { margin:0; font-size:1.12rem; font-weight:700; letter-spacing:-.01em; }
+  .brand small { display:block; color:var(--muted); font-size:.76rem; font-weight:500; margin-top:1px; }
+  .secure { display:flex; align-items:center; gap:6px; color:var(--muted); font-size:.75rem; font-weight:500; padding:6px 10px; border:1px solid var(--line); border-radius:99px; background:var(--surface); }
+  .secure .i { width:14px; height:14px; color:var(--ok); }
 
-  /* cartões */
-  .card { background:var(--card); border:1px solid var(--line); border-radius:var(--r); padding:20px; margin-bottom:14px;
-    backdrop-filter:blur(16px); -webkit-backdrop-filter:blur(16px); box-shadow:0 10px 30px rgba(0,0,0,.25); animation:rise .35s ease both; }
-  .title { display:flex; align-items:center; gap:10px; font-weight:700; font-size:1.05rem; margin:0 0 14px; }
-  .title .ic { width:32px; height:32px; border-radius:10px; display:grid; place-items:center; font-size:1rem; background:var(--card2); border:1px solid var(--line); }
+  /* ---------- blocos ---------- */
+  .card { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:18px; margin-bottom:12px; animation:fade .3s ease both; }
+  .head { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:14px; }
+  .label { display:flex; align-items:center; gap:8px; font-size:.78rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); }
+  .label .i { width:16px; height:16px; }
 
-  /* botões */
-  button { font:inherit; color:#fff; border:0; border-radius:14px; padding:14px 16px; font-size:1rem; font-weight:600; cursor:pointer;
-    background:var(--grad); box-shadow:0 8px 22px rgba(139,92,246,.35); transition:transform .12s, filter .15s, background .15s; min-height:48px; }
-  button:hover { filter:brightness(1.08); }
-  button:active { transform:scale(.97); }
-  button.sec { background:var(--card2); border:1px solid var(--line); box-shadow:none; }
-  button.sec:hover { background:rgba(255,255,255,.08); }
-  button.small { padding:8px 14px; font-size:.85rem; min-height:36px; border-radius:11px; }
-  button.ghost { background:transparent; border:0; box-shadow:none; color:var(--muted); padding:8px 10px; min-height:36px; font-weight:500; }
-  button.ghost:hover { color:var(--fg); }
+  /* ---------- botões ---------- */
+  button { font:inherit; font-weight:600; font-size:.95rem; color:#fff; cursor:pointer; border:0; border-radius:12px; min-height:48px; padding:0 18px;
+    display:inline-flex; align-items:center; justify-content:center; gap:8px;
+    background:var(--accent); box-shadow:inset 0 1px 0 rgba(255,255,255,.18); transition:background .15s, transform .1s, border-color .15s, color .15s; }
+  button:hover { background:#8b7dff; }
+  button:active { transform:scale(.98); }
+  button:focus-visible, input:focus-visible { outline:2px solid var(--accent-2); outline-offset:2px; }
+  button.sec { background:var(--surface2); border:1px solid var(--line2); box-shadow:none; color:var(--fg); }
+  button.sec:hover { background:#202533; }
+  button.text { background:transparent; box-shadow:none; color:var(--muted); min-height:36px; padding:0 10px; font-weight:500; font-size:.85rem; }
+  button.text:hover { color:var(--fg); background:var(--surface2); }
+  button.small { min-height:36px; padding:0 12px; font-size:.84rem; border-radius:10px; }
+  button.iconbtn { width:36px; min-height:36px; padding:0; border-radius:10px; background:var(--surface2); border:1px solid var(--line2); box-shadow:none; color:var(--muted); }
+  button.iconbtn:hover { color:var(--fg); }
   .wide { width:100%; }
 
-  /* campos (16px+ evita o zoom automático do iPhone) */
-  input[type=text] { width:100%; padding:14px; font-size:16px; border-radius:14px; border:1px solid var(--line); background:rgba(0,0,0,.25); color:var(--fg); outline:none; transition:border-color .15s, box-shadow .15s; }
-  input[type=text]:focus { border-color:#8b5cf6; box-shadow:0 0 0 4px rgba(139,92,246,.2); }
-  #codeInput { text-align:center; font-size:1.9rem; font-weight:800; letter-spacing:.4em; padding:10px 10px 10px calc(10px + .4em); font-family:ui-monospace, "SF Mono", Consolas, monospace; text-transform:uppercase; }
-  #codeInput::placeholder { color:rgba(255,255,255,.16); }
+  input[type=text] { width:100%; height:48px; padding:0 14px; font:inherit; font-size:16px; border-radius:12px; border:1px solid var(--line2); background:var(--bg); color:var(--fg); outline:none; }
+  input[type=text]:focus { border-color:var(--accent); }
 
-  /* pareamento */
-  .hero { text-align:center; padding:6px 0 4px; }
-  .hero .big { width:84px; height:84px; margin:0 auto 14px; border-radius:26px; background:var(--grad2); display:grid; place-items:center; font-size:2.3rem; box-shadow:0 12px 34px rgba(34,211,238,.3); }
-  .hero h2 { margin:0 0 6px; font-size:1.3rem; }
-  .hero p { margin:0 0 18px; color:var(--muted); font-size:.92rem; line-height:1.4; }
-  .or { display:flex; align-items:center; gap:12px; color:var(--muted); font-size:.82rem; margin:18px 0 12px; text-align:center; }
-  .or::before, .or::after { content:""; flex:1; height:1px; background:var(--line); }
-  .joinrow { display:grid; grid-template-columns:1fr auto; gap:10px; }
-  .saved { display:flex; align-items:center; gap:8px; margin-bottom:16px; }
-  .saved #btnResume { flex:1; background:linear-gradient(135deg,#10b981,#22d3ee); box-shadow:0 8px 22px rgba(16,185,129,.35); }
+  /* ---------- parear ---------- */
+  .devices { display:flex; align-items:center; justify-content:center; gap:10px; margin:6px 0 16px; }
+  .dev { width:58px; height:58px; border-radius:16px; display:grid; place-items:center; background:var(--surface2); border:1px solid var(--line2); color:var(--accent-2); }
+  .dev .i { width:28px; height:28px; }
+  .wire { width:56px; height:2px; background:repeating-linear-gradient(90deg, var(--accent) 0 6px, transparent 6px 12px); border-radius:2px; opacity:.8; }
+  .intro { text-align:center; }
+  .intro h2 { margin:0 0 6px; font-size:1.2rem; font-weight:700; letter-spacing:-.01em; }
+  .intro p { margin:0 0 18px; color:var(--muted); font-size:.9rem; }
+  .sep { display:flex; align-items:center; gap:12px; color:var(--dim); font-size:.78rem; font-weight:600; letter-spacing:.06em; text-transform:uppercase; margin:18px 0 14px; }
+  .sep::before, .sep::after { content:""; flex:1; height:1px; background:var(--line); }
+  .otp { position:relative; display:grid; grid-template-columns:repeat(3,64px); gap:10px; justify-content:center; margin-bottom:12px; }
+  .otp .box { height:70px; border-radius:14px; border:1.5px solid var(--line2); background:var(--bg); display:grid; place-items:center;
+    font-size:1.9rem; font-weight:700; font-variant-numeric:tabular-nums; transition:border-color .15s, box-shadow .15s; }
+  .otp .box.on { border-color:var(--accent); box-shadow:0 0 0 4px var(--accent-bg); }
+  .otp .box.filled { border-color:var(--line2); color:var(--fg); }
+  #codeInput { position:absolute; inset:0; width:100%; height:100%; opacity:0; font-size:16px; caret-color:transparent; cursor:text; border:0; padding:0; }
+  .saved { display:flex; align-items:center; gap:12px; padding:12px; border-radius:14px; background:var(--accent-bg); border:1px solid rgba(124,108,255,.28); margin-bottom:16px; }
+  .saved .ic { width:40px; height:40px; border-radius:12px; display:grid; place-items:center; background:rgba(124,108,255,.2); color:var(--accent-2); flex:none; }
+  .saved .txt { flex:1; min-width:0; }
+  .saved .txt b { display:block; font-size:.92rem; }
+  .saved .txt span { color:var(--muted); font-size:.8rem; }
+  .saved .acts { display:flex; align-items:center; gap:4px; }
 
-  /* esperando */
-  .codebox { display:flex; justify-content:center; margin:12px 0 4px; }
-  .code { font-size:3.6rem; font-weight:800; letter-spacing:.3em; padding-left:.3em; font-family:ui-monospace, "SF Mono", Consolas, monospace;
-    background:var(--grad); -webkit-background-clip:text; background-clip:text; color:transparent; line-height:1.1; text-align:center; word-break:break-all; }
-  .waitdot { position:relative; width:14px; height:14px; margin:4px auto 12px; }
-  .waitdot::before, .waitdot::after { content:""; position:absolute; inset:0; border-radius:50%; background:#8b5cf6; }
-  .waitdot::after { animation:ring 1.4s ease-out infinite; }
-  #qr { display:flex; justify-content:center; margin-top:16px; }
-  #qr canvas, #qr img { background:#fff; padding:10px; border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,.35); }
+  /* ---------- aguardando ---------- */
+  .tiles3 { display:flex; justify-content:center; gap:10px; margin:14px 0 6px; }
+  .tiles3 span { width:64px; height:76px; border-radius:16px; display:grid; place-items:center; font-size:2.3rem; font-weight:800; font-variant-numeric:tabular-nums;
+    background:var(--surface2); border:1px solid var(--line2); color:#fff; box-shadow:inset 0 -3px 0 rgba(124,108,255,.5); }
+  .tiles3.long span { width:auto; min-width:40px; padding:0 8px; height:56px; font-size:1.4rem; }
+  #qr { display:flex; justify-content:center; margin:18px 0 6px; }
+  #qr canvas, #qr img { background:#fff; padding:10px; border-radius:14px; }
+  .waitline { display:flex; align-items:center; justify-content:center; gap:8px; color:var(--muted); font-size:.85rem; margin-top:12px; }
+  .spinner { width:14px; height:14px; border-radius:50%; border:2px solid var(--line2); border-top-color:var(--accent); animation:spin .8s linear infinite; }
 
-  /* status */
-  .statusbar { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:12px 14px 12px 18px; }
-  .pill { display:flex; align-items:center; gap:10px; font-weight:600; font-size:.95rem; min-width:0; }
-  .status { width:10px; height:10px; border-radius:50%; background:#f59e0b; flex:none; }
-  .status.on { background:var(--ok); animation:pulse 2s infinite; }
+  /* ---------- status ---------- */
+  .statusbar { display:flex; align-items:center; gap:12px; padding:12px 12px 12px 14px; }
+  .stico { width:40px; height:40px; border-radius:12px; display:grid; place-items:center; flex:none; background:var(--warn-bg); color:var(--warn); }
+  .statusbar.on .stico { background:var(--ok-bg); color:var(--ok); }
+  .sttxt { flex:1; min-width:0; }
+  .sttxt b { display:flex; align-items:center; gap:7px; font-size:.95rem; }
+  .status { width:8px; height:8px; border-radius:50%; background:var(--warn); }
+  .status.on { background:var(--ok); animation:glow 2s infinite; }
+  #state { display:block; color:var(--muted); font-size:.8rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
-  /* enviar */
-  .drop { border:2px dashed rgba(139,92,246,.35); border-radius:18px; padding:16px; text-align:center; background:rgba(139,92,246,.05); transition:border-color .15s, background .15s; }
-  .drop.over { border-color:#ec4899; background:rgba(236,72,153,.08); }
-  .drop .hint { color:var(--muted); font-size:.86rem; margin:2px 0 14px; }
-  .tiles { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
-  .tiles button { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; padding:14px 6px; min-height:94px; font-size:.88rem; border-radius:16px; line-height:1.15; }
-  .tiles button .em { font-size:1.7rem; line-height:1; }
-  .tiles:has(> .hidden) { grid-template-columns:repeat(2,1fr); }   /* app Android: sem o botão Pasta */
-  @media (max-width:360px) { .tiles button { min-height:82px; font-size:.8rem; } .tiles button .em { font-size:1.4rem; } }
+  /* ---------- enviar ---------- */
+  .drop { border:1.5px dashed var(--line2); border-radius:16px; padding:22px 14px 16px; text-align:center; background:var(--bg); transition:border-color .15s, background .15s; }
+  .drop.over { border-color:var(--accent); background:var(--accent-bg); }
+  .drop .up { width:52px; height:52px; margin:0 auto 10px; border-radius:16px; display:grid; place-items:center; background:var(--accent-bg); color:var(--accent-2); }
+  .drop .t1 { font-weight:600; font-size:.95rem; }
+  .drop .t2 { color:var(--muted); font-size:.82rem; margin:2px 0 16px; }
+  .picks { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  .picks:has(> .hidden) { grid-template-columns:repeat(2,1fr); }   /* app Android: sem o botão Pasta */
+  .picks button { flex-direction:column; gap:6px; min-height:74px; padding:10px 6px; font-size:.82rem; font-weight:600; border-radius:12px; }
+  .picks button.sec { color:var(--fg); }
+  .picks button .i { width:22px; height:22px; }
 
-  /* progresso */
-  .prog { margin-top:16px; padding:14px; border-radius:16px; background:rgba(0,0,0,.22); border:1px solid var(--line); }
-  .prog .name { font-size:.9rem; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  progress { -webkit-appearance:none; appearance:none; width:100%; height:10px; border:0; border-radius:99px; overflow:hidden; background:rgba(255,255,255,.08); margin:10px 0 8px; display:block; }
-  progress::-webkit-progress-bar { background:rgba(255,255,255,.08); border-radius:99px; }
-  progress::-webkit-progress-value { border-radius:99px; background:var(--grad); }
-  progress::-moz-progress-bar { border-radius:99px; background:var(--grad); }
-  .between { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+  /* ---------- progresso ---------- */
+  .prog { margin-top:12px; padding:12px 14px; border-radius:14px; background:var(--surface2); border:1px solid var(--line); }
+  .prog .row1 { display:flex; align-items:center; gap:10px; }
+  .prog .name { flex:1; min-width:0; font-size:.86rem; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  progress { -webkit-appearance:none; appearance:none; display:block; width:100%; height:6px; border:0; border-radius:99px; overflow:hidden; background:var(--line); margin:10px 0 6px; }
+  progress::-webkit-progress-bar { background:var(--line); border-radius:99px; }
+  progress::-webkit-progress-value { background:linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius:99px; transition:width .2s; }
+  progress::-moz-progress-bar { background:linear-gradient(90deg, var(--accent), var(--accent-2)); border-radius:99px; }
+  .prog .info { color:var(--muted); font-size:.78rem; font-variant-numeric:tabular-nums; }
 
-  /* receber */
-  .destrow { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:6px; }
-  #destName { flex:1; min-width:160px; }
-  #list:empty::before { content:"Os arquivos que chegarem aparecem aqui."; display:block; text-align:center; color:var(--muted); font-size:.9rem; padding:22px 8px; border:1px dashed var(--line); border-radius:16px; margin-top:10px; }
-  .item { display:flex; align-items:center; gap:12px; padding:12px; margin-top:10px; border-radius:16px; background:var(--card2); border:1px solid var(--line); animation:rise .3s ease both; }
-  .item .ico { width:42px; height:42px; border-radius:12px; display:grid; place-items:center; font-size:1.25rem; flex:none; background:rgba(52,211,153,.12); }
-  .item .ico.bad { background:rgba(255,107,129,.12); }
-  .item .meta { flex:1; min-width:0; }
-  .item .nm { font-weight:600; font-size:.93rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .item .sub { color:var(--muted); font-size:.8rem; margin-top:2px; }
-  .item .acts { display:flex; gap:8px; flex:none; }
-  .item a.dl { display:inline-flex; align-items:center; gap:6px; text-decoration:none; color:#fff; font-weight:600; font-size:.85rem; padding:9px 13px; border-radius:11px; background:var(--grad2); }
+  /* ---------- recebidos ---------- */
+  .destrow { display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:12px; background:var(--surface2); border:1px solid var(--line); margin-bottom:10px; }
+  .destrow .i { color:var(--muted); }
+  #destName { flex:1; min-width:0; color:var(--muted); font-size:.82rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #list:empty::before { content:"Nada recebido ainda. Os arquivos aparecem aqui."; display:block; text-align:center; color:var(--dim); font-size:.85rem; padding:26px 10px; border:1.5px dashed var(--line); border-radius:14px; }
+  .item { display:flex; align-items:center; gap:12px; padding:10px 0; border-top:1px solid var(--line); animation:fade .25s ease both; }
+  #list .item:first-child { border-top:0; padding-top:2px; }
+  .ftype { width:40px; height:40px; border-radius:11px; display:grid; place-items:center; flex:none; overflow:hidden; position:relative; }
+  .ftype img { width:100%; height:100%; object-fit:cover; }
+  .ftype.image { background:var(--img-bg); color:var(--img); }
+  .ftype.video { background:var(--vid-bg); color:var(--vid); }
+  .ftype.doc { background:var(--doc-bg); color:var(--doc); }
+  .ftype.zip, .ftype.folder { background:var(--zip-bg); color:var(--zip); }
+  .ftype.bad { background:var(--err-bg); color:var(--err); }
+  .meta { flex:1; min-width:0; }
+  .meta .nm { font-weight:600; font-size:.88rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .meta .sub { display:flex; align-items:center; gap:6px; color:var(--muted); font-size:.76rem; margin-top:1px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .meta .sub .i { width:13px; height:13px; }
+  .meta .sub .in { color:var(--ok); }
+  .meta .sub .out { color:var(--accent-2); }
+  .item .acts { display:flex; gap:6px; flex:none; }
+  a.dl { display:inline-flex; align-items:center; gap:6px; height:34px; padding:0 12px; border-radius:10px; text-decoration:none; color:var(--fg);
+    font-weight:600; font-size:.82rem; background:var(--surface2); border:1px solid var(--line2); }
+  a.dl:hover { border-color:var(--accent); }
+  .ok-tag { display:inline-flex; align-items:center; gap:4px; color:var(--ok); font-weight:600; font-size:.78rem; }
 
-  /* histórico */
-  .hist { display:flex; gap:12px; align-items:center; padding:10px 0; border-top:1px solid var(--line); }
-  .hist:first-child { border-top:0; padding-top:0; }
-  .hist .th { position:relative; width:48px; height:48px; border-radius:14px; background:var(--card2); border:1px solid var(--line); display:grid; place-items:center; flex:none; font-size:1.35rem; }
-  .hist .th img { width:100%; height:100%; object-fit:cover; border-radius:13px; }
-  .hist .badge { position:absolute; right:-5px; bottom:-5px; width:20px; height:20px; border-radius:50%; display:grid; place-items:center; font-size:.68rem; font-weight:800; border:2px solid #121830; }
-  .hist .badge.in { background:var(--ok); color:#052e1f; }
-  .hist .badge.out { background:#8b5cf6; color:#fff; }
-  .hist .meta { flex:1; min-width:0; }
-  .hist .nm { font-weight:600; font-size:.92rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-  .hist .sub { color:var(--muted); font-size:.8rem; margin-top:2px; }
-  #histMore { margin-top:10px; }
+  /* ---------- histórico ---------- */
+  #histMore { margin-top:8px; }
 
-  .muted { color:var(--muted); font-size:.88rem; }
-  .err { color:var(--err); font-size:.88rem; text-align:center; min-height:1.2em; margin:8px 0 0; }
-  .note { background:rgba(99,102,241,.14); border:1px solid rgba(99,102,241,.3); border-radius:14px; padding:12px 14px; margin-top:14px; font-size:.9rem; }
+  .muted { color:var(--muted); font-size:.85rem; }
+  .err { color:var(--err); font-size:.84rem; text-align:center; min-height:1.2em; margin:4px 0 0; }
+  .note { display:flex; gap:10px; align-items:center; background:var(--accent-bg); border:1px solid rgba(124,108,255,.25); border-radius:12px; padding:10px 12px; margin-top:14px; font-size:.85rem; }
   .center { text-align:center; }
   .hidden { display:none !important; }
-  #installTip { padding:12px; }
+  #installTip { padding:10px; }
   #installTip button { width:100%; }
+  #serverBox { margin-bottom:16px; }
 
-  /* PC: enviar e receber lado a lado */
-  @media (min-width:960px) {
-    main { max-width:1000px; }
-    #pair, #waiting { max-width:520px; margin-left:auto; margin-right:auto; }
-    #transfer { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:0 16px; align-items:start; }
+  /* ---------- PC: enviar e recebidos lado a lado ---------- */
+  @media (min-width:900px) {
+    main { max-width:940px; }
+    #pair, #waiting { max-width:440px; margin-left:auto; margin-right:auto; }
+    #transfer { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:0 12px; align-items:start; }
     #transfer > .statusbar { grid-column:1 / -1; }
+    #histCard { margin-top:0; }
   }
 </style>
 </head>
 <body>
+<!-- ícones (traço uniforme, estilo Lucide) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-logo" viewBox="0 0 24 24"><path d="M8 4v14"/><path d="M4 14l4 4 4-4"/><path d="M16 20V6"/><path d="M20 10l-4-4-4 4"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 15V4"/><path d="M7 9l5-5 5 5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11"/><path d="M7 10l5 5 5-5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="1.8"/><path d="M21 15l-4.5-4.5L6 21"/></symbol>
+  <symbol id="i-video" viewBox="0 0 24 24"><rect x="2.5" y="6" width="13" height="12" rx="2.5"/><path d="M15.5 10.5l6-3.5v10l-6-3.5"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6M9 17h4"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2.5h7.5A2.5 2.5 0 0 1 21 10v7.5a2.5 2.5 0 0 1-2.5 2.5h-13A2.5 2.5 0 0 1 3 17.5z"/></symbol>
+  <symbol id="i-zip" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9"/><path d="M10 13h4"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6L6 18M6 6l12 12"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 3l9.5 17h-19z"/><path d="M12 10v4M12 17.5v.01"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></symbol>
+  <symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4.5 4.5 0 0 0 6.4 0l3-3a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M14 10a4.5 4.5 0 0 0-6.4 0l-3 3a4.5 4.5 0 0 0 6.4 6.4l1-1"/></symbol>
+  <symbol id="i-power" viewBox="0 0 24 24"><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/><path d="M12 2.5v9"/></symbol>
+  <symbol id="i-laptop" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="11" rx="1.5"/><path d="M2 19h20"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18h2"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 19V5M6 11l6-6 6 6"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M12 5v14M6 13l6 6 6-6"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.8-3.4 8-8 9-4.6-1-8-4.2-8-9V6z"/><path d="M9 12l2 2 4-4"/></symbol>
+  <symbol id="i-inbox" viewBox="0 0 24 24"><path d="M22 13h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5h13L22 13v5a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-5z"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M9 7V4.5h6V7"/><path d="M6.5 7l1 13h9l1-13"/></symbol>
+  <symbol id="i-gallery" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M12 8v8M8 12l4 4 4-4"/></symbol>
+  <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></symbol>
+</svg>
+
 <main>
-  <header class="top">
-    <div class="logo" aria-hidden="true">
-      <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v13"/><path d="M3 13l4 4 4-4"/><path d="M17 20V7"/><path d="M21 11l-4-4-4 4"/></svg>
+  <header class="appbar">
+    <div class="brand">
+      <div class="logo"><svg class="i"><use href="#i-logo"/></svg></div>
+      <div><h1>P2P Drop</h1><small>PC ⇄ celular</small></div>
     </div>
-    <div class="brand"><h1>P2P Drop</h1><p>PC ⇄ celular · direto e criptografado</p></div>
+    <div class="secure"><svg class="i"><use href="#i-shield"/></svg>Criptografado</div>
   </header>
 
   <div id="installTip" class="card hidden muted"></div>
 
   <section id="pair" class="card">
-    <div id="serverBox" class="hidden" style="margin-bottom:16px">
-      <div class="muted" style="margin-bottom:6px">Servidor (só no app)</div>
+    <div id="serverBox" class="hidden">
+      <div class="label" style="margin-bottom:8px">Servidor</div>
       <input id="serverInput" type="text" placeholder="https://..." autocapitalize="off" autocorrect="off" spellcheck="false">
     </div>
     <div id="savedBox" class="hidden">
       <div class="saved">
-        <button id="btnResume">🔁 Reconectar</button>
-        <button id="btnForget" class="ghost small" title="Esquecer esse aparelho">Esquecer</button>
+        <div class="ic"><svg class="i"><use href="#i-link"/></svg></div>
+        <div class="txt"><b>Último aparelho</b><span id="savedCode"></span></div>
+        <div class="acts">
+          <button id="btnForget" class="iconbtn" title="Esquecer esse aparelho" aria-label="Esquecer esse aparelho"><svg class="i sm"><use href="#i-trash"/></svg></button>
+          <button id="btnResume" class="small"><svg class="i sm"><use href="#i-refresh"/></svg>Reconectar</button>
+        </div>
       </div>
     </div>
-    <div class="hero">
-      <div class="big" aria-hidden="true">📲</div>
+    <div class="intro">
+      <div class="devices" aria-hidden="true">
+        <div class="dev"><svg class="i"><use href="#i-laptop"/></svg></div>
+        <div class="wire"></div>
+        <div class="dev"><svg class="i"><use href="#i-phone"/></svg></div>
+      </div>
       <h2>Conecte seus aparelhos</h2>
-      <p>Crie um código aqui e digite no outro aparelho.<br>Só na primeira vez — depois conecta sozinho.</p>
+      <p>Só na primeira vez. Depois conecta sozinho.</p>
     </div>
-    <button id="btnCreate" class="wide">✨ Criar código</button>
-    <div class="or">ou digite o código do outro aparelho</div>
-    <div class="joinrow">
-      <input id="codeInput" type="text" maxlength="32" placeholder="000" inputmode="numeric" autocapitalize="characters" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="Código">
-      <button id="btnJoin">Conectar</button>
+    <button id="btnCreate" class="wide"><svg class="i"><use href="#i-plus"/></svg>Gerar código neste aparelho</button>
+    <div class="sep">ou digite o código</div>
+    <div class="otp" id="otp">
+      <div class="box"></div><div class="box"></div><div class="box"></div>
+      <input id="codeInput" type="text" maxlength="3" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" aria-label="Código de 3 números">
     </div>
+    <button id="btnJoin" class="sec wide">Conectar</button>
     <p class="err" id="codeErr"></p>
     <div id="queueNotePair" class="note hidden"></div>
   </section>
 
   <section id="waiting" class="card hidden center">
-    <div class="waitdot" aria-hidden="true"></div>
-    <div class="muted" id="waitTitle">Digite este código no outro aparelho:</div>
-    <div class="codebox"><div class="code" id="myCode"></div></div>
+    <div class="label" style="justify-content:center" id="waitTitle">Digite no outro aparelho</div>
+    <div class="tiles3" id="myCode"></div>
     <div id="qr"></div>
-    <p class="muted" id="qrHint">ou aponte a câmera do celular para o QR</p>
+    <div class="muted" id="qrHint">ou aponte a câmera do celular para o QR</div>
+    <div class="waitline"><span class="spinner"></span><span>Aguardando o outro aparelho…</span></div>
     <p class="muted" id="sigMsg"></p>
     <div id="queueNoteWait" class="note hidden"></div>
-    <button id="btnBack" class="ghost small" style="margin-top:6px">← Voltar</button>
+    <button id="btnBack" class="text" style="margin-top:8px"><svg class="i sm"><use href="#i-arrow-left"/></svg>Voltar</button>
   </section>
 
   <div id="transfer" class="hidden">
-    <div class="card statusbar">
-      <div class="pill"><span class="status" id="dot"></span><span id="state">Conectando…</span></div>
-      <button id="btnNewPair" class="sec small">Desconectar</button>
+    <div class="card statusbar" id="statusbar">
+      <div class="stico"><svg class="i"><use href="#i-link"/></svg></div>
+      <div class="sttxt"><b><span class="status" id="dot"></span><span id="stateTitle">Conectando…</span></b><span id="state"></span></div>
+      <button id="btnNewPair" class="iconbtn" title="Desconectar" aria-label="Desconectar"><svg class="i sm"><use href="#i-power"/></svg></button>
     </div>
 
     <section class="card">
-      <div class="title"><span class="ic">⬆️</span>Enviar</div>
+      <div class="head"><div class="label"><svg class="i"><use href="#i-upload"/></svg>Enviar</div></div>
       <div class="drop" id="drop">
-        <div class="hint">Toque para escolher ou arraste arquivos e pastas aqui</div>
-        <div class="tiles">
-          <button id="btnMedia"><span class="em">🖼️</span>Fotos e vídeos</button>
-          <button id="btnFiles" class="sec"><span class="em">📄</span>Arquivos</button>
-          <button id="btnDir" class="sec"><span class="em">📁</span>Pasta</button>
+        <div class="up"><svg class="i lg"><use href="#i-upload"/></svg></div>
+        <div class="t1">Arraste arquivos aqui</div>
+        <div class="t2">ou escolha o que enviar</div>
+        <div class="picks">
+          <button id="btnMedia"><svg class="i"><use href="#i-image"/></svg>Fotos e vídeos</button>
+          <button id="btnFiles" class="sec"><svg class="i"><use href="#i-file"/></svg>Arquivos</button>
+          <button id="btnDir" class="sec"><svg class="i"><use href="#i-folder"/></svg>Pasta</button>
         </div>
         <input id="fileMedia" type="file" multiple accept="image/*,video/*" class="hidden">
         <input id="fileAny" type="file" multiple class="hidden">
         <input id="fileDir" type="file" webkitdirectory multiple class="hidden">
       </div>
       <div id="sendProg" class="prog hidden">
-        <div class="name" id="sendName"></div>
+        <div class="row1"><div class="name" id="sendName"></div>
+          <button id="btnCancelSend" class="iconbtn hidden" title="Cancelar envio" aria-label="Cancelar envio"><svg class="i sm"><use href="#i-x"/></svg></button></div>
         <progress id="sendBar" value="0" max="100"></progress>
-        <div class="between"><span class="muted" id="sendInfo"></span><button id="btnCancelSend" class="sec small hidden">Cancelar</button></div>
+        <div class="info" id="sendInfo"></div>
       </div>
     </section>
 
     <section class="card">
-      <div class="title"><span class="ic">⬇️</span>Receber</div>
+      <div class="head"><div class="label"><svg class="i"><use href="#i-inbox"/></svg>Recebidos</div></div>
       <div id="destBox" class="hidden">
         <div class="destrow">
-          <button id="btnDest" class="sec small">📂 Escolher pasta</button>
-          <span class="muted" id="destName">Sem pasta: chegam como download.</span>
+          <svg class="i sm"><use href="#i-folder"/></svg>
+          <span id="destName">Chegam como download</span>
+          <button id="btnDest" class="sec small">Escolher pasta</button>
         </div>
       </div>
       <div id="recvProg" class="prog hidden">
-        <div class="name" id="recvName"></div>
+        <div class="row1"><div class="name" id="recvName"></div>
+          <button id="btnCancelRecv" class="iconbtn" title="Cancelar" aria-label="Cancelar recebimento"><svg class="i sm"><use href="#i-x"/></svg></button></div>
         <progress id="recvBar" value="0" max="100"></progress>
-        <div class="between"><span class="muted" id="recvInfo"></span><button id="btnCancelRecv" class="sec small">Cancelar</button></div>
+        <div class="info" id="recvInfo"></div>
       </div>
       <div id="list"></div>
     </section>
   </div>
 
   <section id="histCard" class="card hidden">
-    <div class="title" style="justify-content:space-between"><span style="display:flex;align-items:center;gap:10px"><span class="ic">🕘</span>Histórico</span><button id="btnClearHist" class="ghost small">Limpar</button></div>
+    <div class="head"><div class="label"><svg class="i"><use href="#i-clock"/></svg>Histórico</div>
+      <button id="btnClearHist" class="text">Limpar</button></div>
     <div id="histList"></div>
-    <button id="histMore" class="sec small wide hidden"></button>
+    <button id="histMore" class="text wide hidden"></button>
   </section>
 </main>
 
@@ -307,7 +385,7 @@ function b64(buf) {
 function unb64(s) { const bin = atob(s); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u.buffer; }
 function savedWhere(name) {
   const m = mimeOf(name, '');
-  return m.startsWith('image/') ? 'Galeria (Pictures/P2PDrop)' : m.startsWith('video/') ? 'Galeria (Movies/P2PDrop)' : 'Downloads/P2PDrop';
+  return m.startsWith('image/') || m.startsWith('video/') ? 'Na galeria' : 'Em Downloads';
 }
 
 /* ---------- utilidades ---------- */
@@ -591,7 +669,14 @@ async function drain(viaP2P) {
     if (!ws || ws.readyState !== 1) throw new Error('sem conexão com o servidor');
   }
 }
-function setState(on, text) { $('dot').classList.toggle('on', on); $('state').textContent = text; }
+function setState(on, text) {
+  $('dot').classList.toggle('on', on);
+  $('statusbar').classList.toggle('on', on);
+  // título curto + detalhe, em vez da frase técnica inteira
+  const direct = /direto/.test(text), relay = /servidor \(relay/.test(text);
+  $('stateTitle').textContent = on ? 'Conectado' : text.split(' — ')[0];
+  $('state').textContent = direct ? 'Direto entre os aparelhos' : relay ? 'Pelo servidor · criptografado' : on ? text : (text.split(' — ')[1] || '');
+}
 
 async function startPeer(isOfferer) {
   if (pc) { try { pc.close(); } catch {} }           // reconexão: não deixa o par antigo vivo
@@ -655,11 +740,14 @@ function leave() {
 function refreshSaved() {
   const s = store.get('p2pPair', null);
   $('savedBox').classList.toggle('hidden', !s);
-  if (s) $('btnResume').textContent = `🔁 Reconectar  ·  ${fmtCode(s.code)}`;
+  if (s) $('savedCode').textContent = 'Código ' + fmtCode(s.code);
 }
 function openCode(c, isNew) {
-  $('myCode').textContent = fmtCode(c);
-  $('waitTitle').textContent = isNew ? 'Digite este código no outro aparelho:' : 'Esperando o outro aparelho abrir o P2P Drop…';
+  const tiles = $('myCode'); tiles.innerHTML = '';
+  tiles.classList.toggle('long', c.length > 4);
+  for (const ch of fmtCode(c)) { const sp = document.createElement('span'); sp.textContent = ch; tiles.append(sp); }
+  $('waitTitle').textContent = isNew ? 'Digite no outro aparelho' : 'Seu código';
+  $('qr').classList.toggle('hidden', !isNew); $('qrHint').classList.toggle('hidden', !isNew);
   $('qr').innerHTML = '';
   // se a biblioteca do QR não carregar (CDN fora/bloqueada) o código ainda funciona sem o QR
   try { new QRCode($('qr'), { text: `${origin()}/#c=${c}`, width: 180, height: 180 }); } catch {}
@@ -675,32 +763,43 @@ const partials = new Map();    // fid -> arquivo pela metade, para retomar após
 const completed = new Set();   // fids já recebidos (reenvio após queda não duplica)
 let recvMeter = null;
 
+const svgIcon = (id, cls = '') => `<svg class="i ${cls}"><use href="#i-${id}"/></svg>`;
 function typeIcon(name) {
+  if (/\.zip$/i.test(name)) return { k: 'zip', i: 'zip' };
+  if (/\(pasta/.test(name)) return { k: 'folder', i: 'folder' };
   const m = mimeOf(name, '');
-  return /\.zip$/i.test(name) ? '📦' : m.startsWith('image/') ? '🖼️' : m.startsWith('video/') ? '🎬' : '📄';
+  return m.startsWith('image/') ? { k: 'image', i: 'image' } : m.startsWith('video/') ? { k: 'video', i: 'video' } : { k: 'doc', i: 'file' };
 }
-// Cartão de arquivo recebido: ícone, nome, tamanho/observação e ação (baixar / salvar nas Fotos)
+function ftypeEl(name, thumb, bad) {
+  const t = typeIcon(name), el = document.createElement('div');
+  el.className = 'ftype ' + (bad ? 'bad' : t.k);
+  if (thumb) { const img = document.createElement('img'); img.src = thumb; img.alt = ''; el.append(img); }
+  else el.innerHTML = svgIcon(bad ? 'alert' : t.i);
+  return el;
+}
+// Arquivo recebido: ícone do tipo, nome, tamanho/onde foi salvo e ação (baixar / salvar nas Fotos)
 function addItem(label, size, { url, downloadName, galleryFiles, icon } = {}) {
   const [name, note] = label.split(/\s(?:—|→)\s(.*)/s);
   const div = document.createElement('div'); div.className = 'item';
-  const ico = document.createElement('div'); ico.className = 'ico' + (icon ? ' bad' : '');
-  ico.textContent = icon || typeIcon(name);
   const meta = document.createElement('div'); meta.className = 'meta';
   const nm = document.createElement('div'); nm.className = 'nm'; nm.textContent = name; nm.title = name;
   const sub = document.createElement('div'); sub.className = 'sub';
-  sub.textContent = [size, note].filter(Boolean).join(' · ') || (icon ? '' : 'Salvo');
+  sub.textContent = [size, note].filter(Boolean).join(' · ');
   meta.append(nm, sub);
-  div.append(ico, meta);
+  div.append(ftypeEl(name, null, !!icon), meta);
   const acts = document.createElement('div'); acts.className = 'acts';
   if (galleryFiles) {
     const b = document.createElement('button');
-    b.className = 'small'; b.textContent = '📱 Salvar nas Fotos';
+    b.className = 'small'; b.innerHTML = svgIcon('gallery', 'sm') + 'Salvar nas Fotos';
     b.onclick = () => saveToGallery(galleryFiles());
     acts.append(b);
   } else if (url) {
     const a = document.createElement('a'); a.className = 'dl';
-    a.href = url; a.download = downloadName; a.textContent = '⬇ Baixar';
+    a.href = url; a.download = downloadName; a.innerHTML = svgIcon('download', 'sm') + 'Baixar';
     acts.append(a);
+  } else if (!icon) {
+    const ok = document.createElement('span'); ok.className = 'ok-tag'; ok.innerHTML = svgIcon('check', 'sm') + 'Salvo';
+    acts.append(ok);
   }
   if (acts.childNodes.length) div.append(acts);
   $('list').prepend(div);
@@ -895,7 +994,7 @@ function enqueue(items) {            // items: [{ file, path }]
 
 function updateQueueUI() {
   const n = sendQueue.length;
-  const txt = n ? `📤 ${n} arquivo${n > 1 ? 's' : ''} esperando para enviar — conecte com o outro aparelho.` : '';
+  const txt = n ? `${n} arquivo${n > 1 ? 's' : ''} na fila. Envia sozinho quando conectar.` : '';
   for (const id of ['queueNotePair', 'queueNoteWait']) { $(id).textContent = txt; $(id).classList.toggle('hidden', !n); }
   $('btnCancelSend').classList.toggle('hidden', !(sending || n));   // Cancelar só aparece com algo para cancelar
   if (n && !sending && !linkReady()) {
@@ -930,7 +1029,7 @@ async function pump() {
       }
     }
     if (!sendQueue.length) {
-      $('sendName').textContent = sentCount ? `Envio concluído ✔ (${sentCount} arquivo${sentCount > 1 ? 's' : ''})` : 'Envio cancelado';
+      $('sendName').textContent = sentCount ? `Concluído · ${sentCount} arquivo${sentCount > 1 ? 's' : ''} enviado${sentCount > 1 ? 's' : ''}` : 'Envio cancelado';
       $('sendInfo').textContent = '';
       sentCount = queuedCount = 0;
     }
@@ -1010,17 +1109,16 @@ function renderHistory() {
   const list = $('histList'); list.innerHTML = '';
   const shown = histAll ? h : h.slice(0, 5);          // só os 5 mais recentes, para não poluir
   for (const e of shown) {
-    const row = document.createElement('div'); row.className = 'hist';
-    const th = document.createElement('div'); th.className = 'th';
-    if (e.thumb) { const img = document.createElement('img'); img.src = e.thumb; img.alt = ''; th.append(img); }
-    else th.textContent = /pasta/.test(e.name) ? '📁' : typeIcon(e.name);
-    const badge = document.createElement('span'); badge.className = 'badge ' + (e.dir === 'in' ? 'in' : 'out');
-    badge.textContent = e.dir === 'in' ? '↓' : '↑'; th.append(badge);
+    const row = document.createElement('div'); row.className = 'item';
     const meta = document.createElement('div'); meta.className = 'meta';
     const nm = document.createElement('div'); nm.className = 'nm'; nm.textContent = e.name; nm.title = e.name;
     const sub = document.createElement('div'); sub.className = 'sub';
-    sub.textContent = `${e.dir === 'in' ? 'Recebido' : 'Enviado'} · ${fmt(e.size)} · ${new Date(e.at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}`;
-    meta.append(nm, sub); row.append(th, meta); list.append(row);
+    const when = new Date(e.at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+    sub.innerHTML = e.dir === 'in' ? svgIcon('down', 'in') : svgIcon('up', 'out');
+    sub.append(`${e.dir === 'in' ? 'Recebido' : 'Enviado'} · ${fmt(e.size)} · ${when}`);
+    meta.append(nm, sub);
+    row.append(ftypeEl(e.name, e.thumb), meta);
+    list.append(row);
   }
   const more = $('histMore');
   more.classList.toggle('hidden', h.length <= 5);
@@ -1072,7 +1170,18 @@ $('btnJoin').onclick = () => {
   $('codeErr').textContent = '';
   openCode(c, false);
 };
-$('codeInput').oninput = () => { $('codeErr').textContent = ''; };
+function renderOtp() {
+  const v = $('codeInput').value, boxes = $('otp').querySelectorAll('.box');
+  const focused = document.activeElement === $('codeInput');
+  boxes.forEach((b, i) => { b.textContent = v[i] || ''; b.classList.toggle('filled', !!v[i]); b.classList.toggle('on', focused && i === Math.min(v.length, 2)); });
+}
+$('codeInput').oninput = () => {
+  $('codeInput').value = $('codeInput').value.replace(/\D/g, '').slice(0, 3);
+  $('codeErr').textContent = '';
+  renderOtp();
+  if ($('codeInput').value.length === 3) { $('codeInput').blur(); $('btnJoin').click(); }   // 3º número: conecta sozinho
+};
+$('codeInput').onfocus = $('codeInput').onblur = renderOtp;
 $('btnResume').onclick = () => { const s = store.get('p2pPair', null); if (s) openCode(s.code, false); };
 $('btnForget').onclick = () => forgetPair();
 $('btnBack').onclick = () => leave();
@@ -1112,7 +1221,7 @@ if (window.showDirectoryPicker) {
   $('btnDest').onclick = async () => {
     try {
       destDir = await showDirectoryPicker({ mode: 'readwrite' });
-      $('destName').textContent = '📂 Salvando em: ' + destDir.name;
+      $('destName').textContent = 'Salvando em: ' + destDir.name;
     } catch {}
   };
 }
@@ -1131,14 +1240,14 @@ const standalone = NATIVE || window.matchMedia('(display-mode: standalone)').mat
 if (!standalone) {
   const tip = $('installTip');
   if (/iPhone|iPad|iPod/.test(navigator.userAgent)) {
-    tip.textContent = '📲 Para instalar: toque em Compartilhar (□↑) no Safari → "Adicionar à Tela de Início".';
+    tip.textContent = 'Para instalar: toque em Compartilhar no Safari e depois em "Adicionar à Tela de Início".';
     tip.classList.remove('hidden');
   } else {
     window.addEventListener('beforeinstallprompt', (ev) => {
       ev.preventDefault();
       tip.innerHTML = '';
       const b = document.createElement('button');
-      b.textContent = '📲 Instalar o app (e aparecer no menu Compartilhar)'; b.style.width = '100%';
+      b.textContent = 'Instalar o app'; b.style.width = '100%';
       b.onclick = () => { ev.prompt(); tip.classList.add('hidden'); };
       tip.append(b); tip.classList.remove('hidden');
     });
